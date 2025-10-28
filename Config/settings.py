@@ -176,12 +176,6 @@ REST_AUTH = {
     'PASSWORD_RESET_SERIALIZER': 'dj_rest_auth.serializers.PasswordResetSerializer',
     'REGISTER_SERIALIZER': 'Account.serializers.RegisterSerializer',
 }
-REST_AUTH_REGISTER_SERIALIZERS = {
-    'REGISTER_SERIALIZER': 'Account.serializers.RegisterSerializer',
-}
-REST_AUTH_SERIALIZERS = {
-    'USER_DETAILS_SERIALIZER': 'Account.serializers.UserDetailsSerializer',
-}
 
 REST_AUTH_TOKEN_MODEL = None 
 
@@ -217,6 +211,8 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:3001',
     "http://localhost:8080",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 CORS_ALLOW_CREDENTIALS = True
 

@@ -13,8 +13,6 @@ def email_address_exists(email):
 class RegisterSerializer(serializers.Serializer):
     first_name = serializers.CharField(required=True, write_only=True)
     last_name = serializers.CharField(required=True, write_only=True)
-    premium_user = serializers.BooleanField(required=False, default=False)
-    subscription_end_date = serializers.DateField(required=False, allow_null=True)
     email = serializers.EmailField(required=allauth_settings.EMAIL_REQUIRED)
     username = serializers.CharField(required=True, write_only=True)
     password1 = serializers.CharField(required=True, write_only=True)
@@ -48,8 +46,6 @@ class RegisterSerializer(serializers.Serializer):
             'username': self.validated_data.get('username', ''),
             'first_name': self.validated_data.get('first_name', ''),
             'last_name': self.validated_data.get('last_name', ''),
-            'premium_user': self.validated_data.get('premium_user', False),
-            'subscription_end_date': self.validated_data.get('subscription_end_date', None),
         }
     
     def save(self, request):
@@ -62,19 +58,17 @@ class RegisterSerializer(serializers.Serializer):
         
         first_name = self.cleaned_data.get('first_name')
         last_name = self.cleaned_data.get('last_name')
-        premium_user = self.cleaned_data.get('premium_user')
-        subscription_end_date = self.cleaned_data.get('subscription_end_date')
 
         user.first_name = first_name
         user.last_name = last_name
-        user.premium_user = premium_user
-        user.subscription_end_date = subscription_end_date
 
         
         try:
             user.save()
         except IntegrityError as e:
             raise serializers.ValidationError({"error": "A user with that username or email already exists."})
+        
+        return user
 
 class UserDetailsSerializer(UserDetailsSerializer):
     
