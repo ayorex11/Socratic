@@ -41,7 +41,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(max_length=250, blank=True)
     email = models.EmailField('email address', unique=True)
     username = models.CharField(max_length=50, unique=True)
-    date_of_birth = models.DateField(blank=False, null=True)
     premium_user = models.BooleanField(default=False)
     subscription_end_date = models.DateField(blank=True, null=True)
     number_of_generations = models.IntegerField(default=0)
