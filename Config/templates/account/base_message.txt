@@ -1,0 +1,11 @@
+{% load i18n %}{% autoescape off %}{% blocktrans with site_name="Socrates" %}{% endblocktrans %}
+
+{% block content %}{% endblock %}
+
+{% blocktrans with site_name="Socrates" site_domain="Socrates.com" %}
+Thank you for choosing {{site_name}} for your educational needs. We look forward to helping you grow academically!
+
+Best regards,
+The {{site_name}} Team
+{{ site_domain }}{% endblocktrans %}
+{% endautoescape %}

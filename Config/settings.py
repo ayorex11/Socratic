@@ -148,7 +148,7 @@ urlpatterns = []
 
 STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 
 
 if DEBUG:
     from django.conf.urls.static import static
@@ -162,9 +162,21 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
+ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Socratic] '
+SITE_ID = 1
+SITE_NAME = 'Socratic'
+
 
 
 AUTH_USER_MODEL = 'Account.User'
+
+FRONTEND_URL = 'http://localhost:5173'
+DJANGO_SITE_URL = 'http://localhost:8000'
+
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_SIGNUP_FIELDS = ['email*']
+
+BASE_URL = 'localhost:5173'
 
 REST_AUTH = {
     'USE_JWT' : True,
@@ -173,7 +185,6 @@ REST_AUTH = {
     'JWT_AUTH_HTTPONLY': False,
     'JWT_AUTH_REFRESH_COOKIE' : 'my-refresh-token',
     'USER_DETAILS_SERIALIZER': 'Account.serializers.UserDetailsSerializer',
-    'PASSWORD_RESET_SERIALIZER': 'dj_rest_auth.serializers.PasswordResetSerializer',
     'REGISTER_SERIALIZER': 'Account.serializers.RegisterSerializer',
 }
 
@@ -252,7 +263,7 @@ SIMPLE_JWT = {
 
 
 
-#ACCOUNT_ADAPTER = 'Config.adapters.CustomAccountAdapter'
+ACCOUNT_ADAPTER = 'Config.adapters.CustomAccountAdapter'
 
 
 GEMINI_CONFIG = {
@@ -282,7 +293,6 @@ SWAGGER_SETTINGS = {
 
 CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0' 
 CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'

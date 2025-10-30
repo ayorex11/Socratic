@@ -1,0 +1,21 @@
+{% extends "templates/account/base_message.txt" %}
+{% load account %}
+{% load i18n %}
+{% block content %}
+{% autoescape off %}
+{% user_display user as user_display %}
+{% blocktrans with site_name="Socrates" site_domain="Socrates.com" %}
+Dear {{ user_display }},
+Thank you for signing up with {{site_name}}!.
+
+please confirm your email address by clicking the link below:
+
+{{ activate_url }}
+
+By confirming your email address, you'll also gain access to exclusive features and be the first to know about any special promotions or events.
+
+If you did not sign up for an account on {{site_name}}, please disregard this email.
+
+{% endblocktrans %}
+{% endautoescape %}
+{% endblock %}
