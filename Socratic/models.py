@@ -17,6 +17,8 @@ class ProcessingResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     processing_time = models.FloatField(null=True, blank=True)
     quiz_generated = models.BooleanField(default=False)
+    pdf_generated = models.BooleanField(default=False)
+    audio_generated = models.BooleanField(default=False)
     status = models.CharField(max_length=50, default='PROCESSING')
     
     class Meta:

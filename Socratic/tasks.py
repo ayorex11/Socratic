@@ -55,6 +55,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         try:
             audio_path = TextToSpeech.generate_audio(result.summary, f"audio_{result_id}")
             result.audio_summary = audio_path
+            result.audio_generated = True
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Normal', status_code='200',
                 message=f'Task {self.request.id} successfully generated audio for result ID {result_id}'
@@ -69,6 +70,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         try:
             pdf_path = AdvancedPDFGenerator.generate_report(processing_result=result, output_filename=f"report_{result_id}")
             result.pdf_report = pdf_path
+            result.pdf_generated = True
         except Exception as e:
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Warning', status_code='400',
