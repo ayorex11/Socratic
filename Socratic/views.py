@@ -123,7 +123,6 @@ def create_processing(request):
 
 @permission_classes([IsAuthenticated])
 @api_view(['GET'])
-@throttle_classes([AnonRateThrottle, UserRateThrottle, UserBurstRateThrottle, UserSustainedRateThrottle])
 def list_processing_results(request):
     """Get all processing results"""
     user = request.user

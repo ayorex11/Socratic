@@ -9,7 +9,8 @@ from logs.models import LogEntry
 from django.utils import timezone
 from drf_yasg.utils import swagger_auto_schema
 import re
-import unicodedata # New Import for comprehensive text cleaning
+import unicodedata
+from Socratic.models import ProcessingResult # New Import for comprehensive text cleaning
 
 # --- Utility Function: Aggressive Text Normalization ---
 def normalize_text_for_comparison(text):
@@ -60,10 +61,11 @@ def get_user_quizzes(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def start_quiz(request, quiz_id):
+def start_quiz(request, pk):
     user = request.user
     try:
-        quiz = Quiz.objects.get(id=quiz_id, study_material__user=user)
+        study = ProcessingResult.objects.get(id=pk, user=user)
+        quiz = Quiz.objects.get(study_material=study, study_material__user=user)
         try: 
             # Reset score for a new attempt
             score = UserScore.objects.get(user=user, quiz=quiz)
@@ -92,7 +94,7 @@ def start_quiz(request, quiz_id):
             timestamp=timezone.now(),
             level = 'Medium',
             status_code = '404',
-            message = f'User {user.username} attempted to start a non-existent quiz with id {quiz_id}.'
+            message = f'User {user.username} attempted to start a non-existent quiz with id {quiz.id}.'
         )
         return Response({'error': 'Quiz not found.'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
@@ -101,7 +103,7 @@ def start_quiz(request, quiz_id):
             timestamp=timezone.now(),
             level='Error',
             status_code='500',
-            message=f'Critical server error during quiz start for {quiz_id}: {str(e)}'
+            message=f'Critical server error during quiz start for {quiz.id}: {str(e)}'
         )
         return Response({'error': 'An internal server error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -109,7 +111,7 @@ def start_quiz(request, quiz_id):
 @swagger_auto_schema(methods=['POST',], request_body=QuizSubmissionSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def submit_answer(request, quiz_id):
+def submit_answer(request, pk):
     user = request.user
     
     # 1. Explicit JSON Validation
@@ -120,7 +122,7 @@ def submit_answer(request, quiz_id):
             timestamp=timezone.now(),
             level='Medium',
             status_code='400',
-            message=f'User {user.username} submitted invalid data for quiz {quiz_id}: {serializer.errors}'
+            message=f'User {user.username} submitted invalid data for quiz {quiz.id}: {serializer.errors}'
         )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -129,7 +131,8 @@ def submit_answer(request, quiz_id):
     score = 0
     
     try:
-        quiz = Quiz.objects.get(id=quiz_id, study_material__user=user)
+        study = ProcessingResult.objects.get(id=pk, user=user)
+        quiz = Quiz.objects.get(study_material=study, study_material__user=user)
         total_questions = quiz.total_questions # Assuming this field is accurate
         
         # Process all answers
@@ -226,7 +229,7 @@ def submit_answer(request, quiz_id):
             timestamp=timezone.now(),
             level='Medium',
             status_code='404',
-            message=f'User {user.username} attempted to submit non-existent quiz {quiz_id}.'
+            message=f'User {user.username} attempted to submit non-existent quiz {quiz.id}.'
         )
         return Response({'error': 'Quiz not found.'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -236,7 +239,7 @@ def submit_answer(request, quiz_id):
             timestamp=timezone.now(),
             level='Error',
             status_code='500',
-            message=f'Critical server error during quiz submission for {quiz_id}: {str(e)}'
+            message=f'Critical server error during quiz submission for {quiz.id}: {str(e)}'
         )
         return Response({'error': 'An internal server error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -244,10 +247,11 @@ def submit_answer(request, quiz_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 
-def get_my_attempts(request, quiz_id):
+def get_my_attempts(request, pk):
     user = request.user
     try:
-        quiz = Quiz.objects.get(id=quiz_id, study_material__user=user)
+        study = ProcessingResult.objects.get(id=pk, user=user)
+        quiz = Quiz.objects.get(study_material=study, study_material__user=user)
         attempts = UserAttempt.objects.filter(user=user, quiz=quiz)
         tracker = AttemptTracker.objects.get(user=user, quiz=quiz)
         serializer = UserAttemptSerializer(attempts, many=True)
@@ -269,7 +273,7 @@ def get_my_attempts(request, quiz_id):
             timestamp=timezone.now(),
             level='Medium',
             status_code='404',
-            message=f'User {user.username} attempted to retrieve attempts for non-existent quiz {quiz_id}.'
+            message=f'User {user.username} attempted to retrieve attempts for non-existent quiz {quiz.id}.'
         )
         return Response({'error': 'Quiz not found.'}, status=status.HTTP_404_NOT_FOUND)
 
