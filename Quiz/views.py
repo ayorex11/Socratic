@@ -94,7 +94,7 @@ def start_quiz(request, pk):
             timestamp=timezone.now(),
             level = 'Medium',
             status_code = '404',
-            message = f'User {user.username} attempted to start a non-existent quiz with id {quiz.id}.'
+            message = f'User {user.username} attempted to start a non-existent quiz with id {pk}.'
         )
         return Response({'error': 'Quiz not found.'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
@@ -103,7 +103,7 @@ def start_quiz(request, pk):
             timestamp=timezone.now(),
             level='Error',
             status_code='500',
-            message=f'Critical server error during quiz start for {quiz.id}: {str(e)}'
+            message=f'Critical server error during quiz start for processing result {pk}: {str(e)}'
         )
         return Response({'error': 'An internal server error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -122,7 +122,7 @@ def submit_answer(request, pk):
             timestamp=timezone.now(),
             level='Medium',
             status_code='400',
-            message=f'User {user.username} submitted invalid data for quiz {quiz.id}: {serializer.errors}'
+            message=f'User {user.username} submitted invalid data for processing result {pk}: {serializer.errors}'
         )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -229,7 +229,7 @@ def submit_answer(request, pk):
             timestamp=timezone.now(),
             level='Medium',
             status_code='404',
-            message=f'User {user.username} attempted to submit non-existent quiz {quiz.id}.'
+            message=f'User {user.username} attempted to submit non-existent quiz for processing result {pk}.'
         )
         return Response({'error': 'Quiz not found.'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -239,7 +239,7 @@ def submit_answer(request, pk):
             timestamp=timezone.now(),
             level='Error',
             status_code='500',
-            message=f'Critical server error during quiz submission for {quiz.id}: {str(e)}'
+            message=f'Critical server error during quiz submission for processing result {pk}: {str(e)}'
         )
         return Response({'error': 'An internal server error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -273,7 +273,7 @@ def get_my_attempts(request, pk):
             timestamp=timezone.now(),
             level='Medium',
             status_code='404',
-            message=f'User {user.username} attempted to retrieve attempts for non-existent quiz {quiz.id}.'
+            message=f'User {user.username} attempted to retrieve attempts for non-existent quiz with processing result {pk}.'
         )
         return Response({'error': 'Quiz not found.'}, status=status.HTTP_404_NOT_FOUND)
 

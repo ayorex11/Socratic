@@ -10,7 +10,7 @@ class QuizSerializer(serializers.ModelSerializer):
 class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
-        exclude = ['quiz', 'answer']
+        exclude = ['quiz',]
 
 class QuizSubmissionSerializer(serializers.Serializer):
     answers = serializers.DictField(
