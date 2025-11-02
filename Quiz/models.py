@@ -19,6 +19,7 @@ class Question(models.Model):
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
     text = models.TextField()
     answer = models.TextField()
+    explanation = models.TextField(blank=True, null=True)
     option_1 = models.TextField()
     option_2 = models.TextField()
     option_3 = models.TextField()

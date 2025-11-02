@@ -52,12 +52,20 @@ class AIPoweredQuizGenerator:
                             summary,
                             processing_result.user.premium_user
                         )
+
+                        explanation = AIPoweredQuizGenerator._generate_explanation(
+                            question_text,
+                            concise_answer,
+                            summary,
+                            processing_result.user.premium_user
+                        )
                         
                         # Create the question
                         Question.objects.create(
                             quiz=quiz,
                             text=question_text,
                             answer=concise_answer,
+                            explanation=explanation,
                             option_1=options[0],
                             option_2=options[1],
                             option_3=options[2],
@@ -311,6 +319,43 @@ class AIPoweredQuizGenerator:
         options = [correct_answer] + distractor_list[:3]
         random.shuffle(options)
         return options
+    
+    @staticmethod
+    def _generate_explanation(question, correct_answer, context, is_premium_user):
+        """
+        Generate a brief explanation for the correct answer using AI
+        """
+        try:
+            # Choose the appropriate AI processor
+            if is_premium_user:
+                from .ai_processor import PremiumAIProcessor as AIProcessor
+            else:
+                from .free_ai_processor import AIProcessor
+            
+            prompt = f"""
+            Provide a brief explanation (1-3 sentences) for why the following answer is correct based on the context.
+            
+            QUESTION: {question}
+            CORRECT ANSWER: {correct_answer}
+            CONTEXT: {context[:1500]}
+            
+            Requirements:
+            1. Keep it concise and to the point
+            2. Clearly link the explanation to the context provided
+            3. Avoid unnecessary details or tangents
+            
+            Format: Provide only the explanation itself, no additional text.
+            """
+            
+            response = AIProcessor._model.generate_content(prompt)
+            if response.text:
+                explanation = response.text.strip()
+                return explanation
+                
+        except Exception as e:
+            print(f"AI explanation generation failed: {e}")
+        
+        return "This answer is correct based on established knowledge and principles related to the topic."
 
 
 class AdvancedQuizGenerator(AIPoweredQuizGenerator):
@@ -456,3 +501,4 @@ class AdvancedQuizGenerator(AIPoweredQuizGenerator):
             option_3="Partially True",
             option_4="Cannot be determined",
         )
+
