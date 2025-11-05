@@ -97,7 +97,7 @@ class AIPoweredQuizGenerator:
             Based on the context below, provide a SHORT but DETAILED answer to the question.
             
             QUESTION: {question}
-            CONTEXT: {context[:1500]}
+            CONTEXT: {context[:15000]}
             
             Requirements for your answer:
             1. Keep it CONCISE (2-4 sentences maximum)
@@ -190,7 +190,7 @@ class AIPoweredQuizGenerator:
         
         QUESTION: {question}
         CORRECT ANSWER: {correct_answer}
-        CONTEXT: {context[:1000]}
+        CONTEXT: {context[:15000]}
         
         Requirements:
         1. Generate exactly 3 distractors
@@ -337,7 +337,7 @@ class AIPoweredQuizGenerator:
             
             QUESTION: {question}
             CORRECT ANSWER: {correct_answer}
-            CONTEXT: {context[:1500]}
+            CONTEXT: {context[:15000]}
             
             Requirements:
             1. Keep it concise and to the point
