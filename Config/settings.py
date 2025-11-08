@@ -168,14 +168,14 @@ MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Email
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'smtp-relay.brevo.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_USER = '9b1d5f001@smtp-brevo.com' 
+EMAIL_HOST_PASSWORD = os.getenv('BREVO_SMTP_KEY')
+DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'  
 
 # Allauth
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Socratic] '
