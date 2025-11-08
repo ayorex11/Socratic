@@ -12,7 +12,7 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             "account_confirm_email",
             args=[emailconfirmation.key],
         )
-        activate_url = "http://localhost:5173" + activate_url
+        activate_url = "https://socratic-frontend-ashy.vercel.app" + activate_url
         ctx = {
             "user": emailconfirmation.email_address.user,
             "activate_url": activate_url,
