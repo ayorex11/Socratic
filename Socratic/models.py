@@ -1,6 +1,6 @@
 from django.db import models
 import uuid
-import os
+from django.core.files.storage import default_storage
 from Account.models import User
 
 class ProcessingResult(models.Model):
@@ -12,8 +12,8 @@ class ProcessingResult(models.Model):
     past_questions_context = models.TextField(blank=True, null=True)
     summary = models.TextField()
     questions_answers = models.JSONField(default=dict)
-    audio_summary = models.FileField(upload_to='audio_summaries/', blank=True, null=True)
-    pdf_report = models.FileField(upload_to='pdf_reports/', blank=True, null=True)
+    audio_summary = models.FileField(upload_to='audio/', blank=True, null=True)
+    pdf_report = models.FileField(upload_to='reports/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     processing_time = models.FloatField(null=True, blank=True)
     quiz_generated = models.BooleanField(default=False)
@@ -29,10 +29,9 @@ class ProcessingResult(models.Model):
         return f"{self.document_title} - {self.created_at}"
     
     def delete(self, *args, **kwargs):
+        # Use Django's storage to delete files from R2
         if self.audio_summary:
-            if os.path.isfile(self.audio_summary.path):
-                os.remove(self.audio_summary.path)
+            default_storage.delete(self.audio_summary.name)
         if self.pdf_report:
-            if os.path.isfile(self.pdf_report.path):
-                os.remove(self.pdf_report.path)
+            default_storage.delete(self.pdf_report.name)
         super().delete(*args, **kwargs)

@@ -1,20 +1,21 @@
 from gtts import gTTS
-import os
 from django.conf import settings
 import uuid
 import re 
+from django.core.files.storage import default_storage
+from io import BytesIO
 
 class TextToSpeech:
     """
     Handles conversion of text to speech using gTTS (free)
-    Generates MP3 files for audio summaries
+    Generates MP3 files for audio summaries directly to R2
     """
     
     @staticmethod
     def generate_audio(text, filename_prefix="audio"):
         """
         Generate audio file from text using gTTS
-        Returns the file path relative to MEDIA_ROOT
+        Returns the file path in R2 storage
         """
         try:
             if not text or len(text.strip()) < 10:
@@ -27,12 +28,8 @@ class TextToSpeech:
                 print("Text too short after cleaning")
                 return None
             
-            audio_dir = os.path.join(settings.MEDIA_ROOT, 'audio_summaries')
-            os.makedirs(audio_dir, exist_ok=True)
-            
             unique_id = uuid.uuid4().hex[:8]
-            filename = f"{filename_prefix}_{unique_id}.mp3"
-            file_path = os.path.join(audio_dir, filename)
+            filename = f"audio/{filename_prefix}_{unique_id}.mp3"  # Goes to 'media/audio/' in R2
             
             print(f"Generating audio for text length: {len(clean_text)} characters")
             
@@ -43,14 +40,16 @@ class TextToSpeech:
                 lang_check=False
             )
             
-            tts.save(file_path)
+            # Save to in-memory buffer
+            buffer = BytesIO()
+            tts.write_to_fp(buffer)
+            buffer.seek(0)
             
-            if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                print(f"Audio file generated successfully: {filename}")
-                return f"audio_summaries/{filename}"
-            else:
-                print("Audio file creation failed")
-                return None
+            # Save directly to R2 using Django's storage
+            file_path = default_storage.save(filename, buffer)
+            
+            print(f"Audio file generated successfully: {file_path}")
+            return file_path  # Returns path in R2
             
         except Exception as e:
             print(f"Audio generation failed: {str(e)}")
@@ -66,12 +65,11 @@ class TextToSpeech:
         
         clean_text = text.strip()
         
-        # 1. Remove Markdown Headings and Separators (e.g., #, ##, ---, list bullets like *)
-        # This removes lines starting with one or more hashes, hyphens, or asterisks followed by a space
+        # 1. Remove Markdown Headings and Separators
         clean_text = re.sub(r'^[#\-*]+\s*', '', clean_text, flags=re.MULTILINE)
         clean_text = re.sub(r'\s*---+\s*', ' ', clean_text)
         
-        # 2. Remove Emphasis Markers (e.g., **bold**, *italic*)
+        # 2. Remove Emphasis Markers
         clean_text = re.sub(r'[\*\_]{1,2}', '', clean_text)
         
         # 3. Collapse excessive whitespace
@@ -80,7 +78,6 @@ class TextToSpeech:
         # 4. Limit text length (5000 is safe)
         max_length = 5000 
         if len(clean_text) > max_length:
-            # Cut text at a sentence break if possible for a smoother end
             clean_text = clean_text[:max_length].rsplit('.', 1)[0] + "." 
         
         # 5. Ensure the text ends with a proper sentence

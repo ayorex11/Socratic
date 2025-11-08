@@ -55,8 +55,12 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         # Audio Generation
         try:
             audio_path = TextToSpeech.generate_audio(result.summary, f"audio_{result_id}")
-            result.audio_summary = audio_path
-            result.audio_generated = True 
+            if audio_path:
+                result.audio_summary.name = audio_path  # Use .name to set R2 path reference
+                result.audio_generated = True
+            else:
+                result.audio_summary = None
+                result.audio_generated = False
             result.save()
 
             LogEntry.objects.create(
@@ -65,8 +69,8 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             )
         except Exception as e:
             result.audio_summary = None 
-            result.audio_generated = False  # ADD THIS LINE
-            result.save()  # ADD THIS LINE
+            result.audio_generated = False
+            result.save()
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Warning', status_code='400',
                 message=f'Task {self.request.id} FAILED audio generation: {str(e)}'
@@ -75,14 +79,22 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         # PDF Generation
         try:
             pdf_path = AdvancedPDFGenerator.generate_report(processing_result=result, output_filename=f"report_{result_id}")
-            result.pdf_report = pdf_path
-            result.pdf_generated = True
+            if pdf_path:
+                result.pdf_report.name = pdf_path  # Use .name to set R2 path reference
+                result.pdf_generated = True
+            else:
+                result.pdf_report = None
+                result.pdf_generated = False
             result.save()
+            
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Normal', status_code='200',
                 message=f'Task {self.request.id} successfully generated PDF for result ID {result_id}'
             )
         except Exception as e:
+            result.pdf_report = None
+            result.pdf_generated = False
+            result.save()
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Warning', status_code='400',
                 message=f'Task {self.request.id} FAILED PDF generation: {str(e)}'
@@ -118,8 +130,8 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         if result:
             try:
                 result.status = 'FAILED'
-                result.audio_generated = False  # ADD THIS LINE
-                result.pdf_generated = False    # ADD THIS LINE
+                result.audio_generated = False
+                result.pdf_generated = False
                 result.save() 
             except Exception:
                 pass

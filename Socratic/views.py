@@ -3,7 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 import time
 import uuid
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse
+import requests
 from django.conf import settings
 import os
 from .models import ProcessingResult
@@ -169,196 +170,132 @@ def get_processing_result(request, pk):
 
 
 
-@permission_classes([IsAuthenticated])
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 @throttle_classes([AnonRateThrottle, UserRateThrottle, UserBurstRateThrottle, UserSustainedRateThrottle])
 def download_pdf(request, pk):
-    """Direct file serving for PDF report"""
     user = request.user
     try:
         result = ProcessingResult.objects.get(pk=pk, user=user)
         
         if not result.pdf_report:
-            LogEntry.objects.create(
-                timestamp=datetime.now(),
-                level='Error',
-                status_code='404',
-                message='pdf report not found at Socratic/download_pdf',
-                user=user
-            )
             return Response(
                 {'error': 'PDF report not available'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Get the file path from the FileField
-        pdf_path = result.pdf_report.path
+        # Get the file URL
+        file_url = result.pdf_report.url
         
-        # Check if file actually exists on disk
-        if not os.path.exists(pdf_path):
-            LogEntry.objects.create(
-                timestamp=datetime.now(),
-                level='Error',
-                status_code='404',
-                message=f'pdf file not found on disk: {pdf_path}',
-                user=user
-            )
-            return Response(
-                {'error': 'PDF file not found on server'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        # Fetch the file from storage
+        response = requests.get(file_url, stream=True)
         
-        try:
-            # Open and serve the file
-            file_handle = open(pdf_path, 'rb')
-            response = FileResponse(file_handle, content_type='application/pdf')
+        if response.status_code == 200:
+            # Create filename
+            filename = f"{result.document_title}_report.pdf".replace(' ', '_')
             
-            # Set safe filename for download
-            safe_filename = f"{result.document_title}_report.pdf".replace(' ', '_')
-            response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
+            # Create HTTP response with file
+            file_response = HttpResponse(
+                response.content,
+                content_type='application/pdf'
+            )
+            file_response['Content-Disposition'] = f'attachment; filename="{filename}"'
             
             LogEntry.objects.create(
-                timestamp=datetime.now(),
+                user=user,
+                timestamp=timezone.now(),
                 level='Normal',
                 status_code='200',
-                message='successful pdf download at Socratic/download_pdf',
-                user=user
+                message='PDF downloaded successfully'
             )
             
-            return response
-            
-        except IOError as e:
-            LogEntry.objects.create(
-                timestamp=datetime.now(),
-                level='Error',
-                status_code='500',
-                message=f'error reading pdf file: {str(e)}',
-                user=user
-            )
+            return file_response
+        else:
             return Response(
-                {'error': 'Error reading PDF file'},
+                {'error': 'Failed to retrieve file'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     except ProcessingResult.DoesNotExist:
-        LogEntry.objects.create(
-            timestamp=datetime.now(),
-            level='Error',   
-            status_code='404',
-            message='processing result not found at Socratic/download_pdf',
-            user=user
-        )  
         return Response(
             {'error': 'Processing result not found'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
         LogEntry.objects.create(
-            timestamp=datetime.now(),
+            user=user,
+            timestamp=timezone.now(),
             level='Error',
             status_code='500',
-            message=f'unexpected error at Socratic/download_pdf: {str(e)}',
-            user=user
+            message=f'Unexpected error in download_pdf_file: {str(e)}'
         )
         return Response(
-            {'error': f'Server error: {str(e)}'},
+            {'error': 'Server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
-@permission_classes([IsAuthenticated])
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 @throttle_classes([AnonRateThrottle, UserRateThrottle, UserBurstRateThrottle, UserSustainedRateThrottle])
 def download_audio(request, pk):
-    """Direct file serving for audio summary"""
     user = request.user
     try:
         result = ProcessingResult.objects.get(pk=pk, user=user)
         
         if not result.audio_summary:
-            LogEntry.objects.create(
-                timestamp=datetime.now(),
-                level='Error',
-                status_code='404',
-                message='audio summary not found at Socratic/download_audio',
-                user=user
-            )
             return Response(
                 {'error': 'Audio summary not available'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Get the file path from the FileField
-        audio_path = result.audio_summary.path
+        # Get the file URL
+        file_url = result.audio_summary.url
         
-        # Check if file actually exists on disk
-        if not os.path.exists(audio_path):
-            LogEntry.objects.create(
-                timestamp=datetime.now(),
-                level='Error',
-                status_code='404',
-                message=f'audio file not found on disk: {audio_path}',
-                user=user
-            )
-            return Response(
-                {'error': 'Audio file not found on server'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        # Fetch the file from storage
+        response = requests.get(file_url, stream=True)
         
-        try:
-            # Open and serve the file
-            file_handle = open(audio_path, 'rb')
-            response = FileResponse(file_handle, content_type='audio/mpeg')
+        if response.status_code == 200:
+            # Create filename
+            filename = f"{result.document_title}_summary.mp3".replace(' ', '_')
             
-            # Set safe filename for download
-            safe_filename = f"{result.document_title}_summary.mp3".replace(' ', '_')
-            response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
+            # Create HTTP response with file
+            file_response = HttpResponse(
+                response.content,
+                content_type='audio/mpeg'
+            )
+            file_response['Content-Disposition'] = f'attachment; filename="{filename}"'
             
             LogEntry.objects.create(
-                timestamp=datetime.now(),
+                user=user,
+                timestamp=timezone.now(),
                 level='Normal',
                 status_code='200',
-                message='successful audio download at Socratic/download_audio',
-                user=user
+                message='Audio downloaded successfully'
             )
             
-            return response
-            
-        except IOError as e:
-            LogEntry.objects.create(
-                timestamp=datetime.now(),
-                level='Error',
-                status_code='500',
-                message=f'error reading audio file: {str(e)}',
-                user=user
-            )
+            return file_response
+        else:
             return Response(
-                {'error': 'Error reading audio file'},
+                {'error': 'Failed to retrieve file'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
     except ProcessingResult.DoesNotExist:
-        LogEntry.objects.create(
-            timestamp=datetime.now(),
-            level='Error',
-            status_code='404',
-            message='processing result not found at Socratic/download_audio',
-            user=user
-        )
         return Response(
             {'error': 'Processing result not found'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
         LogEntry.objects.create(
-            timestamp=datetime.now(),
+            user=user,
+            timestamp=timezone.now(),
             level='Error',
             status_code='500',
-            message=f'unexpected error at Socratic/download_audio: {str(e)}',
-            user=user
+            message=f'Unexpected error in download_audio_file: {str(e)}'
         )
         return Response(
-            {'error': f'Server error: {str(e)}'},
+            {'error': 'Server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
