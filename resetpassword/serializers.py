@@ -31,7 +31,7 @@ class CustomPasswordResetRequestSerializer(serializers.Serializer):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         
         # Create the EXACT URL you want
-        reset_url = f"http://localhost:5173/reset-password/confirm/{uid}/{token}/"
+        reset_url = f"https://socratic-frontend-ashy.vercel.app/reset-password/confirm/{uid}/{token}/"
         
         # Create the EXACT email content you want
         subject = "Password Reset Request"
