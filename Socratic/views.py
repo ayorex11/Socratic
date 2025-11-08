@@ -44,7 +44,7 @@ def create_processing(request):
     past_questions_temp_path = None
 
     # --- 1. Generation Limit Check ---
-    if not user.premium_user and user.number_of_generations >= 3:
+    if not user.is_premium_active and user.number_of_generations >= 3:
         LogEntry.objects.create(
             user=user, timestamp=timezone.now(), level='Normal', status_code='403',
             message='generation limit hit at create_processing'

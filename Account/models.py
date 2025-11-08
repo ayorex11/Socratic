@@ -69,3 +69,18 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.username
+    
+    @property
+    def is_premium_active(self):
+        """Check if user has active premium subscription"""
+        if not self.premium_user:
+            return False
+        
+        if self.subscription_end_date:
+            if self.subscription_end_date < timezone.now().date():
+                self.premium_user = False
+                self.subscription_end_date = None
+                self.save(update_fields=['premium_user', 'subscription_end_date'])
+                return False
+        
+        return True
