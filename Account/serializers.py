@@ -37,6 +37,9 @@ class RegisterSerializer(serializers.Serializer):
         if User.objects.filter(email=data['email']).exists():
             raise serializers.ValidationError(
                 {"email": "A user is already registered with this email address."})
+        if User.objects.filter(username=data['username']).exists():
+            raise serializers.ValidationError(
+                {"username": "A user is already registered with this username."})
         return data
 
     def get_cleaned_data(self):

@@ -20,6 +20,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
+
 ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socratic-frontend-ashy.vercel.app','127.0.0.1']
 
 # Application definition
@@ -170,13 +171,21 @@ MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp-relay.brevo.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = '9b1d5f001@smtp-brevo.com' 
-EMAIL_HOST_PASSWORD = os.getenv('BREVO_SMTP_KEY')
-DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'  
+#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+#EMAIL_HOST = 'smtp-relay.brevo.com'
+#EMAIL_PORT = 587
+#EMAIL_USE_TLS = True
+#EMAIL_HOST_USER = '9b1d5f001@smtp-brevo.com' 
+#EMAIL_HOST_PASSWORD = os.getenv('BREVO_SMTP_KEY')
+#DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'  
+
+EMAIL_BACKEND = "anymail.backends.sendinblue.EmailBackend"
+
+ANYMAIL = {
+    "SENDINBLUE_API_KEY": os.getenv('BREVO_API_KEY'),
+}
+
+DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'
 
 # Allauth
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Socratic] '
@@ -241,7 +250,7 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 # Security
-IS_DEVELOPMENT = os.getenv('ENVIRONMENT') == 'development' or DEBUG
+IS_DEVELOPMENT = DEBUG
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = not IS_DEVELOPMENT  
 SESSION_COOKIE_SECURE = not IS_DEVELOPMENT
