@@ -14,7 +14,6 @@ import os
 from drf_yasg.utils import swagger_auto_schema
 from Account.models import User
 from django.utils import timezone
-from Pricing.models import Pricing
 from logs.models import LogEntry
 
 @swagger_auto_schema(methods=['POST'], request_body=DepositSerializer)
@@ -27,28 +26,8 @@ def initialize_deposit(request):
     serializer.is_valid(raise_exception=True)
     amount = serializer.validated_data['amount']
     email = serializer.validated_data['email']
-    pricing = serializer.validated_data['pricing']
 
-    pricing = Pricing.objects.get(id=pricing)
-    if not Pricing:
-        LogEntry.objects.create(
-        timestamp = timezone.now(),
-        level = 'Error',
-        status_code = '404',
-        message = 'Pricing plan not found at Payment/initialize_deposit',
-        user = user
-        )
-        return Response({'message': 'Pricing plan not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    if pricing.price != amount:
-        LogEntry.objects.create(
-        timestamp = timezone.now(),
-        level = 'Error',
-        status_code = '400',
-        message = 'Wrong amount entered at Payment/initialize_deposit',
-        user = user
-        )
-        return Response({'message': 'amount does not match plan amount'}, status=status.HTTP_400_BAD_REQUEST) 
+ 
     if user.email != email:
         LogEntry.objects.create(
         timestamp = timezone.now(),
@@ -60,7 +39,7 @@ def initialize_deposit(request):
         return Response({'message': 'email address not valid'}, status=status.HTTP_404_NOT_FOUND)
     
     url = "https://api.paystack.co/transaction/initialize"
-    headers = {"authorization": f"Bearer {os.getenv('PAYSTACK_SECRET_KEY')}"}
+    headers = {"authorization": f"Bearer {os.getenv('PRIVATE_KEY')}"}
     request_body = {
         'amount' : int(amount * 100),
         'email' : email,
@@ -73,7 +52,6 @@ def initialize_deposit(request):
         user = user,
         type_of_transaction = 'Payment',
         date_created = timezone.now(),
-        pricing = pricing,
         amount_paid = amount,
         reference = response['data']['reference'],
         completed = False
@@ -91,20 +69,27 @@ def paystack_webhook(request):
     """
     Paystack webhook to handle payment events
     """
-
-    paystack_secret = os.getenv('PAYSTACK_SECRET_KEY')
+    paystack_secret = os.getenv('PRIVATE_KEY')
     signature = request.headers.get('x-paystack-signature')
+    
+    # Log webhook receipt
+    LogEntry.objects.create(
+        timestamp=timezone.now(),
+        level='INFO',
+        status_code='200',
+        message=f'Webhook received: {request.headers}',
+    )
     
     if not signature:
         LogEntry.objects.create(
-        timestamp = timezone.now(),
-        level = 'Error',
-        status_code = '400',
-        message = 'No signature at Payment/paystack_webhook',
+            timestamp=timezone.now(),
+            level='Error',
+            status_code='400',
+            message='No signature at Payment/paystack_webhook',
         )
         return Response({'error': 'No signature'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Verify signature instead of using Django auth
+    # Verify signature
     body = request.body.decode('utf-8')
     computed_signature = hmac.new(
         paystack_secret.encode('utf-8'),
@@ -114,27 +99,42 @@ def paystack_webhook(request):
     
     if not hmac.compare_digest(computed_signature, signature):
         LogEntry.objects.create(
-        timestamp = timezone.now(),
-        level = 'Error',
-        status_code = '400',
-        message = 'Invalid signature at Payment/paystack_webhook',
+            timestamp=timezone.now(),
+            level='Error',
+            status_code='400',
+            message='Invalid signature at Payment/paystack_webhook',
         )
         return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
     
     # Parse the webhook payload
     try:
         payload = json.loads(body)
+        # Log the payload for debugging
+        LogEntry.objects.create(
+            timestamp=timezone.now(),
+            level='INFO',
+            status_code='200',
+            message=f'Webhook payload: {json.dumps(payload)}',
+        )
     except json.JSONDecodeError:
         LogEntry.objects.create(
-        timestamp = timezone.now(),
-        level = 'Error',
-        status_code = '400',
-        message = 'Invalid JSON at Payment/paystack_webhook',
+            timestamp=timezone.now(),
+            level='Error',
+            status_code='400',
+            message='Invalid JSON at Payment/paystack_webhook',
         )
         return Response({'error': 'Invalid JSON'}, status=status.HTTP_400_BAD_REQUEST)
     
     event = payload.get('event')
     data = payload.get('data')
+    
+    # Log the event
+    LogEntry.objects.create(
+        timestamp=timezone.now(),
+        level='INFO',
+        status_code='200',
+        message=f'Processing webhook event: {event}',
+    )
     
     # Handle different events
     if event == 'charge.success':
@@ -142,13 +142,11 @@ def paystack_webhook(request):
     elif event == 'charge.failed':
         return handle_failed_payment(data)
     else:
-        # Log unhandled events
-        print(f"Unhandled webhook event: {event}")
         LogEntry.objects.create(
-        timestamp = timezone.now(),
-        level = 'Error',
-        status_code = '400',
-        message = 'Unhandled Event at Payment/paystack_webhook',
+            timestamp=timezone.now(),
+            level='Warning',
+            status_code='200',
+            message=f'Unhandled webhook event: {event}',
         )
         return Response({'status': 'unhandled_event'}, status=status.HTTP_200_OK)
 
@@ -170,15 +168,11 @@ def handle_successful_payment(data):
         # Update transaction status
         transaction.completed = True
         transaction.date_completed = timezone.now()
-        transaction.pricing.user_count += 1
-        transaction.user.premium_user = True
-        if transaction.pricing.pricing_duration == 'Month':
-            transaction.user.subscription_end_date = timezone.now() + timezone.timedelta(days=30)
-        elif transaction.pricing.pricing_duration == 'Year':
-            transaction.user.subscription_end_date = timezone.now() + timezone.timedelta(days=365)
-        else:
-            pass
         transaction.save()
+        transaction.user.premium_user = True
+        transaction.user.subscription_end_date = timezone.now() + timezone.timedelta(days=30)
+        transaction.user.save()
+        
 
         
         
@@ -215,7 +209,7 @@ def handle_failed_payment(data):
     reference = data.get('reference')
     
     try:
-        transaction = Transaction.objects.get(transaction_reference=reference)
+        transaction = Transaction.objects.get(reference=reference)
         transaction.completed = False
         transaction.save()
         LogEntry.objects.create(
@@ -229,3 +223,21 @@ def handle_failed_payment(data):
         
     except Transaction.DoesNotExist:
         return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def transaction_history(request):
+    user = request.user
+    transactions = Transaction.objects.filter(user=user).order_by('-date_created')
+    data = []
+    for tx in transactions:
+        data.append({
+            'type_of_transaction': tx.type_of_transaction,
+            'date_created': tx.date_created,
+            'amount_paid': tx.amount_paid,
+            'reference': tx.reference,
+            'completed': tx.completed,
+            'date_completed': tx.date_completed,
+        })
+    return Response({'transactions': data}, status=status.HTTP_200_OK)

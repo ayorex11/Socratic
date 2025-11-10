@@ -9,4 +9,3 @@ class DepositSerializer(serializers.Serializer):
 
     amount = serializers.IntegerField(validators=[is_positive])
     email = serializers.EmailField()
-    pricing = serializers.IntegerField()
