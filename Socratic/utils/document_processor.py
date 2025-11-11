@@ -284,18 +284,30 @@ class DocumentProcessor:
         """Extract text from images using OCR"""
         try:
             image = Image.open(file_path)
+        
+            # Check image size and resize if too large (memory optimization)
+            max_dimension = 3000  # pixels
+            if max(image.size) > max_dimension:
+                ratio = max_dimension / max(image.size)
+                new_size = tuple(int(dim * ratio) for dim in image.size)
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+                print(f"Resized image to {new_size} for memory efficiency")
+        
             if image.mode != 'RGB':
                 image = image.convert('RGB')
-            
-            text = pytesseract.image_to_string(image)
-            
+        
+                text = pytesseract.image_to_string(image)
+        
+            # Close image to free memory immediately
+            image.close()
+        
             # Process with same section extraction
             processed_text = DocumentProcessor._reconstruct_paragraphs(text)
             meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
-            print(f'this is past questions {meaningful_content}')
-            
+            print(f'Extracted text from image: {len(meaningful_content)} characters')
+        
             return meaningful_content.strip()
-            
+        
         except Exception as e:
             raise Exception(f"Image OCR failed: {str(e)}. Please ensure the image is clear and well-lit.")
     

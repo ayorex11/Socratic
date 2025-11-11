@@ -1,4 +1,4 @@
-set -o errexit
+git ls-files --stage render-build.shset -o errexit
 
 echo "=== Installing Tesseract OCR ==="
 apt-get update
