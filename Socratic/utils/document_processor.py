@@ -5,6 +5,31 @@ import os
 import re
 from docx import Document
 
+try:
+    
+    possible_paths = [
+        '/usr/bin/tesseract',
+        '/usr/local/bin/tesseract',
+        '/app/.apt/usr/bin/tesseract'
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            pytesseract.pytesseract.tesseract_cmd = path
+            print(f"Tesseract found at: {path}")
+            break
+    else:
+        # Fallback: try to find in PATH
+        import shutil
+        tesseract_path = shutil.which('tesseract')
+        if tesseract_path:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            print(f"Tesseract found in PATH: {tesseract_path}")
+        else:
+            print("Warning: Tesseract not found in standard locations")
+except Exception as e:
+    print(f"Warning: Could not set Tesseract path: {e}")
+
 class DocumentProcessor:
     """
     Enhanced text extraction with comprehensive structural analysis
