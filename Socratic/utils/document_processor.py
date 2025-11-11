@@ -1,34 +1,45 @@
 import PyPDF2
-import pytesseract
 from PIL import Image
 import os
 import re
 from docx import Document
 
+# Tesseract configuration with comprehensive fallbacks
+OCR_AVAILABLE = False
 try:
+    import pytesseract
+    OCR_AVAILABLE = True
     
+    # Try to auto-detect tesseract in Render's path
     possible_paths = [
         '/usr/bin/tesseract',
         '/usr/local/bin/tesseract',
         '/app/.apt/usr/bin/tesseract'
     ]
     
+    tesseract_found = False
     for path in possible_paths:
         if os.path.exists(path):
             pytesseract.pytesseract.tesseract_cmd = path
-            print(f"Tesseract found at: {path}")
+            tesseract_found = True
+            print(f"✅ Tesseract configured at: {path}")
             break
-    else:
-        # Fallback: try to find in PATH
+    
+    if not tesseract_found:
+        # Try to find in system PATH
         import shutil
         tesseract_path = shutil.which('tesseract')
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            print(f"Tesseract found in PATH: {tesseract_path}")
+            tesseract_found = True
+            print(f"✅ Tesseract found in PATH: {tesseract_path}")
         else:
-            print("Warning: Tesseract not found in standard locations")
-except Exception as e:
-    print(f"Warning: Could not set Tesseract path: {e}")
+            print("⚠️  Tesseract not found. Image OCR will not be available.")
+            OCR_AVAILABLE = False
+            
+except ImportError as e:
+    print(f"❌ pytesseract not available: {e}")
+    OCR_AVAILABLE = False
 
 class DocumentProcessor:
     """
@@ -307,6 +318,8 @@ class DocumentProcessor:
     @staticmethod
     def extract_text_from_image(file_path):
         """Extract text from images using OCR"""
+        if not OCR_AVAILABLE:
+            raise Exception("OCR functionality is not available. Please ensure pytesseract is installed and configured.")
         try:
             image = Image.open(file_path)
         
