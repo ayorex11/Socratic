@@ -27,7 +27,7 @@ class DocumentProcessor:
                 # Reconstruct paragraphs and filter non-content
                 processed_text = DocumentProcessor._reconstruct_paragraphs(full_text)
                 meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
-                print(meaningful_content)
+
                 
                 return meaningful_content.strip()
                 
