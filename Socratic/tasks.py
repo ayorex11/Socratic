@@ -35,33 +35,6 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             message=f'Task {self.request.id} started processing for result ID {result_id}'
         )
 
-        # Diagnostic: Check Tesseract availability
-        try:
-            tesseract_check = subprocess.run(['which', 'tesseract'], 
-                                            capture_output=True, text=True, timeout=5)
-            tesseract_path = tesseract_check.stdout.strip()
-            
-            if tesseract_path:
-                version_check = subprocess.run(['tesseract', '--version'], 
-                                              capture_output=True, text=True, timeout=5)
-                print(f"Tesseract found at: {tesseract_path}")
-                print(f"Tesseract version: {version_check.stdout}")
-                LogEntry.objects.create(
-                    user=user, timestamp=timezone.now(), level='Normal', status_code='200',
-                    message=f'Tesseract available at: {tesseract_path}'
-                )
-            else:
-                print("WARNING: Tesseract not found in PATH")
-                LogEntry.objects.create(
-                    user=user, timestamp=timezone.now(), level='Warning', status_code='400',
-                    message='Tesseract OCR not found - image processing may fail'
-                )
-        except Exception as e:
-            print(f"Tesseract check failed: {e}")
-            LogEntry.objects.create(
-                user=user, timestamp=timezone.now(), level='Warning', status_code='400',
-                message=f'Tesseract check failed: {str(e)}'
-            )
 
         # Extract study material text with enhanced error handling
         try:

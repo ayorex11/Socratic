@@ -3,43 +3,7 @@ from PIL import Image
 import os
 import re
 from docx import Document
-
-# Tesseract configuration with comprehensive fallbacks
-OCR_AVAILABLE = False
-try:
-    import pytesseract
-    OCR_AVAILABLE = True
-    
-    # Try to auto-detect tesseract in Render's path
-    possible_paths = [
-        '/usr/bin/tesseract',
-        '/usr/local/bin/tesseract',
-        '/app/.apt/usr/bin/tesseract'
-    ]
-    
-    tesseract_found = False
-    for path in possible_paths:
-        if os.path.exists(path):
-            pytesseract.pytesseract.tesseract_cmd = path
-            tesseract_found = True
-            print(f"✅ Tesseract configured at: {path}")
-            break
-    
-    if not tesseract_found:
-        # Try to find in system PATH
-        import shutil
-        tesseract_path = shutil.which('tesseract')
-        if tesseract_path:
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            tesseract_found = True
-            print(f"✅ Tesseract found in PATH: {tesseract_path}")
-        else:
-            print("⚠️  Tesseract not found. Image OCR will not be available.")
-            OCR_AVAILABLE = False
-            
-except ImportError as e:
-    print(f"❌ pytesseract not available: {e}")
-    OCR_AVAILABLE = False
+import requests
 
 class DocumentProcessor:
     """
@@ -315,39 +279,60 @@ class DocumentProcessor:
         except Exception as e:
             raise Exception(f"DOCX extraction failed: {str(e)}")
     
+
+
     @staticmethod
     def extract_text_from_image(file_path):
-        """Extract text from images using OCR"""
-        if not OCR_AVAILABLE:
-            raise Exception("OCR functionality is not available. Please ensure pytesseract is installed and configured.")
+        """Extract text from images using OCR.space API"""
         try:
-            image = Image.open(file_path)
-        
-            # Check image size and resize if too large (memory optimization)
-            max_dimension = 3000  # pixels
-            if max(image.size) > max_dimension:
-                ratio = max_dimension / max(image.size)
-                new_size = tuple(int(dim * ratio) for dim in image.size)
-                image = image.resize(new_size, Image.Resampling.LANCZOS)
-                print(f"Resized image to {new_size} for memory efficiency")
-        
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-        
-                text = pytesseract.image_to_string(image)
-        
-            # Close image to free memory immediately
-            image.close()
-        
-            # Process with same section extraction
-            processed_text = DocumentProcessor._reconstruct_paragraphs(text)
-            meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
-            print(f'Extracted text from image: {len(meaningful_content)} characters')
-        
-            return meaningful_content.strip()
-        
+            print(f"Starting OCR.space OCR for: {file_path}")
+            
+            api_key = os.getenv('OCR_API_KEY') 
+            if not api_key:
+                raise Exception("OCR_API_KEY not found in environment variables")
+            
+            # Prepare the image
+            with open(file_path, 'rb') as f:
+                files = {'file': f}
+                
+                payload = {
+                    'apikey': api_key,
+                    'language': 'eng',
+                    'isOverlayRequired': False,
+                    'detectOrientation': True,
+                    'scale': True,
+                    'OCREngine': 2 
+                }
+                
+                response = requests.post(
+                    'https://api.ocr.space/parse/image',
+                    files=files,
+                    data=payload
+                )
+                
+                result = response.json()
+                
+                if result.get('IsErroredOnProcessing'):
+                    raise Exception(f"OCR.space error: {result.get('ErrorMessage', 'Unknown error')}")
+                
+                # Extract text
+                text = result.get('ParsedResults', [{}])[0].get('ParsedText', '')
+                
+                if text:
+                    print(f"OCR.space extracted {len(text)} characters")
+                    
+                    # Process with same section extraction
+                    processed_text = DocumentProcessor._reconstruct_paragraphs(text)
+                    meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
+                    
+                    return meaningful_content.strip()
+                else:
+                    print("No text detected in image")
+                    return ""
+                    
         except Exception as e:
-            raise Exception(f"Image OCR failed: {str(e)}. Please ensure the image is clear and well-lit.")
+            print(f"OCR.space failed: {str(e)}")
+            raise Exception(f"Image OCR failed: {str(e)}")
     
     @staticmethod
     def extract_text(file_path, file_type):
