@@ -180,7 +180,8 @@ def download_pdf(request, pk):
         
         if not result.pdf_report:
             return Response(
-                {'error': 'PDF report not available'},
+                {'error': 'PDF report not available',
+                 'status': result.status},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -212,13 +213,15 @@ def download_pdf(request, pk):
             return file_response
         else:
             return Response(
-                {'error': 'Failed to retrieve file'},
+                {'error': 'Failed to retrieve file',
+                 'status': result.status},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     except ProcessingResult.DoesNotExist:
         return Response(
-            {'error': 'Processing result not found'},
+            {'error': 'Processing result not found',
+             'status': result.status},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
@@ -230,7 +233,8 @@ def download_pdf(request, pk):
             message=f'Unexpected error in download_pdf_file: {str(e)}'
         )
         return Response(
-            {'error': 'Server error'},
+            {'error': 'Server error',
+             'status': result.status},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -245,7 +249,8 @@ def download_audio(request, pk):
         
         if not result.audio_summary:
             return Response(
-                {'error': 'Audio summary not available'},
+                {'error': 'Audio summary not available',
+                 'status': result.status},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -277,13 +282,15 @@ def download_audio(request, pk):
             return file_response
         else:
             return Response(
-                {'error': 'Failed to retrieve file'},
+                {'error': 'Failed to retrieve file',
+                 'status': result.status},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     except ProcessingResult.DoesNotExist:
         return Response(
-            {'error': 'Processing result not found'},
+            {'error': 'Processing result not found', 
+            'status': result.status},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
@@ -295,7 +302,8 @@ def download_audio(request, pk):
             message=f'Unexpected error in download_audio_file: {str(e)}'
         )
         return Response(
-            {'error': 'Server error'},
+            {'error': 'Server error',
+             'status': result.status},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
