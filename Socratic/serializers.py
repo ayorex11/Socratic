@@ -103,5 +103,6 @@ class MinimalProcessingResultSerializer(serializers.ModelSerializer):
             'quiz_generated',
             'pdf_generated',
             'audio_generated',
+            'status',
         ]
         read_only_fields = fields

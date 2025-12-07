@@ -7,4 +7,5 @@ urlpatterns = [
     path('download_audio/<uuid:pk>/', views.download_audio),
     path('download_pdf/<uuid:pk>/', views.download_pdf),
     path('delete/<uuid:pk>/', views.delete_processing_result),
+    path('check_status/', views.check_processing_status),
 ]

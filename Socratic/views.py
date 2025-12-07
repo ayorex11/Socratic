@@ -337,3 +337,23 @@ def delete_processing_result(request, pk):
             {'error': 'Processing result not found'},
             status=status.HTTP_404_NOT_FOUND
         )
+    
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_processing_status(request):
+    """Check status of all processing results"""
+    user = request.user
+    results = ProcessingResult.objects.filter(user=user)
+    
+    data = []
+    for result in results:
+        data.append({
+            'id': str(result.id),
+            'status': result.status,
+            'quiz_generated': result.quiz_generated,
+            'pdf_generated': result.pdf_generated,
+            'audio_generated': result.audio_generated,
+        })
+    
+    return Response(data)
