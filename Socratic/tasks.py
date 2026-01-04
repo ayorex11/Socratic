@@ -27,21 +27,22 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         user = User.objects.get(id=user_id)
         result = ProcessingResult.objects.get(id=result_id)
         
+        # STAGE 1: Starting Processing
         result.status = 'PROCESSING'
-        result.save()
+        result.update_stage('extracting_text', progress=10, message='Starting text extraction...')
         
         LogEntry.objects.create(
             user=user, timestamp=timezone.now(), level='Normal', status_code='200',
             message=f'Task {self.request.id} started processing for result ID {result_id}'
         )
 
-
-        # Extract study material text with enhanced error handling
+        # STAGE 2: Extract study material text
         try:
             study_file_type = DocumentProcessor.get_file_type(study_material_name)
             print(f"Processing study material: {study_material_name}, type: {study_file_type}")
             
-            # Verify temp file exists and has content
+            result.update_stage('extracting_text', progress=20, message=f'Extracting from {study_file_type} file...')
+            
             if not os.path.exists(study_temp_path):
                 raise Exception(f"Study material temp file not found: {study_temp_path}")
             
@@ -57,6 +58,8 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             if not study_text or len(study_text.strip()) < 50:
                 raise Exception("Insufficient text extracted from study material")
             
+            result.update_stage('extracting_text', progress=35, message=f'Extracted {len(study_text)} characters')
+            
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Normal', status_code='200',
                 message=f'Successfully extracted {len(study_text)} characters from study material'
@@ -65,20 +68,22 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         except Exception as e:
             error_msg = f'Study material extraction failed: {str(e)}'
             print(error_msg)
+            result.update_stage('failed', progress=0, message=error_msg)
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Error', status_code='500',
                 message=error_msg
             )
             raise
         
-        # Extract past questions text with graceful error handling
+        # STAGE 3: Extract past questions (optional)
         past_questions_text = ""
         if past_questions_temp_path and os.path.exists(past_questions_temp_path):
             try:
+                result.update_stage('extracting_text', progress=45, message='Processing past questions...')
+                
                 past_questions_file_type = DocumentProcessor.get_file_type(past_questions_temp_path)
                 print(f"Processing past questions, type: {past_questions_file_type}")
                 
-                # Verify temp file has content
                 file_size = os.path.getsize(past_questions_temp_path)
                 print(f"Past questions file size: {file_size} bytes")
                 
@@ -89,6 +94,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
                 print(f"Extracted past questions: {len(past_questions_text)} characters")
                 
                 if past_questions_text and len(past_questions_text.strip()) > 20:
+                    result.update_stage('extracting_text', progress=50, message='Past questions extracted successfully')
                     LogEntry.objects.create(
                         user=user, timestamp=timezone.now(), level='Normal', status_code='200',
                         message=f'Successfully extracted {len(past_questions_text)} characters from past questions'
@@ -104,17 +110,12 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
                     user=user, timestamp=timezone.now(), level='Error', status_code='500',
                     message=error_msg
                 )
-                # Don't fail the whole task, just continue without past questions
                 past_questions_text = ""
-        elif past_questions_temp_path:
-            print(f"Past questions file not found at: {past_questions_temp_path}")
-            LogEntry.objects.create(
-                user=user, timestamp=timezone.now(), level='Warning', status_code='400',
-                message='Past questions file path provided but file not found'
-            )
             
-        # AI Processing
+        # STAGE 4: AI Processing - Generate Summary and Q&A
         try:
+            result.update_stage('generating_summary', progress=55, message='Analyzing content with AI...')
+            
             if user.premium_user:
                 summary, qa_data = PremiumAIProcessor.generate_enhanced_content(study_text, past_questions_text)
             else:
@@ -125,6 +126,8 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             result.questions_answers = qa_data
             result.save()
             
+            result.update_stage('generating_summary', progress=65, message='AI analysis completed')
+            
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Normal', status_code='200',
                 message=f'Task {self.request.id} successfully generated AI content for result ID {result_id}'
@@ -132,46 +135,27 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         except Exception as e:
             error_msg = f'AI content generation failed: {str(e)}'
             print(error_msg)
+            result.update_stage('failed', progress=0, message=error_msg)
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Error', status_code='500',
                 message=error_msg
             )
             raise
 
-        # Audio Generation
+        # STAGE 5: PDF Generation
         try:
-            audio_path = TextToSpeech.generate_audio(result.summary, f"audio_{result_id}")
-            if audio_path:
-                result.audio_summary.name = audio_path  # Use .name to set R2 path reference
-                result.audio_generated = True
-            else:
-                result.audio_summary = None
-                result.audio_generated = False
-            result.save()
-
-            LogEntry.objects.create(
-                user=user, timestamp=timezone.now(), level='Normal', status_code='200',
-                message=f'Task {self.request.id} successfully generated audio for result ID {result_id}'
-            )
-        except Exception as e:
-            result.audio_summary = None 
-            result.audio_generated = False
-            result.save()
-            LogEntry.objects.create(
-                user=user, timestamp=timezone.now(), level='Warning', status_code='400',
-                message=f'Task {self.request.id} FAILED audio generation: {str(e)}'
-            )
-
-        # PDF Generation
-        try:
+            result.update_stage('creating_pdf', progress=70, message='Generating PDF report...')
+            
             pdf_path = AdvancedPDFGenerator.generate_report(processing_result=result, output_filename=f"report_{result_id}")
             if pdf_path:
-                result.pdf_report.name = pdf_path  # Use .name to set R2 path reference
+                result.pdf_report.name = pdf_path
                 result.pdf_generated = True
             else:
                 result.pdf_report = None
                 result.pdf_generated = False
             result.save()
+            
+            result.update_stage('creating_pdf', progress=75, message='PDF generated successfully')
             
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Normal', status_code='200',
@@ -181,31 +165,68 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             result.pdf_report = None
             result.pdf_generated = False
             result.save()
+            result.update_stage('creating_pdf', progress=75, message=f'PDF generation failed: {str(e)}')
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Warning', status_code='400',
                 message=f'Task {self.request.id} FAILED PDF generation: {str(e)}'
             )
 
-        # Quiz Generation
+        # STAGE 6: Audio Generation
         try:
+            result.update_stage('generating_audio', progress=80, message='Creating audio summary...')
+            
+            audio_path = TextToSpeech.generate_audio(result.summary, f"audio_{result_id}")
+            if audio_path:
+                result.audio_summary.name = audio_path
+                result.audio_generated = True
+            else:
+                result.audio_summary = None
+                result.audio_generated = False
+            result.save()
+            
+            result.update_stage('generating_audio', progress=85, message='Audio generated successfully')
+
+            LogEntry.objects.create(
+                user=user, timestamp=timezone.now(), level='Normal', status_code='200',
+                message=f'Task {self.request.id} successfully generated audio for result ID {result_id}'
+            )
+        except Exception as e:
+            result.audio_summary = None 
+            result.audio_generated = False
+            result.save()
+            result.update_stage('generating_audio', progress=85, message=f'Audio generation failed: {str(e)}')
+            LogEntry.objects.create(
+                user=user, timestamp=timezone.now(), level='Warning', status_code='400',
+                message=f'Task {self.request.id} FAILED audio generation: {str(e)}'
+            )
+
+        # STAGE 7: Quiz Generation
+        try:
+            result.update_stage('creating_quiz', progress=90, message='Generating practice quiz...')
+            
             if user.premium_user:
                 AdvancedQuizGenerator.generate_enhanced_quiz(result)
             else:
                 AIPoweredQuizGenerator.generate_quiz_from_processing_result(result)
+            
+            result.update_stage('creating_quiz', progress=95, message='Quiz generated successfully')
+            
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Normal', status_code='200',
                 message=f'Task {self.request.id} successfully generated quiz for result ID {result_id}'
             )
         except Exception as e:
+            result.update_stage('creating_quiz', progress=95, message=f'Quiz generation failed: {str(e)}')
             LogEntry.objects.create(
                 user=user, timestamp=timezone.now(), level='Warning', status_code='400',
                 message=f'Task {self.request.id} FAILED quiz generation: {str(e)}'
             )
 
+        # STAGE 8: Completion
         end_time = time.time()
         result.processing_time = end_time - start_time
         result.status = 'COMPLETED'
-        result.save()
+        result.update_stage('completed', progress=100, message='All processing completed successfully!')
 
         LogEntry.objects.create(
             user=user, timestamp=timezone.now(), level='Normal', status_code='200',
@@ -221,7 +242,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
                 result.status = 'FAILED'
                 result.audio_generated = False
                 result.pdf_generated = False
-                result.save() 
+                result.update_stage('failed', progress=0, message=str(e))
             except Exception as save_error:
                 print(f"Failed to update result status: {save_error}")
         

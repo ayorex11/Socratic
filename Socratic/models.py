@@ -4,6 +4,17 @@ from django.core.files.storage import default_storage
 from Account.models import User
 
 class ProcessingResult(models.Model):
+
+    STAGE_CHOICES = [
+        ('pending', 'Pending'),
+        ('extracting_text', 'Extracting Text'),
+        ('generating_summary', 'Generating Summary'),
+        ('creating_pdf', 'Creating PDF'),
+        ('generating_audio', 'Generating Audio'),
+        ('creating_quiz', 'Creating Quiz'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='processing_results')
     document_title = models.CharField(max_length=255)
@@ -20,6 +31,9 @@ class ProcessingResult(models.Model):
     pdf_generated = models.BooleanField(default=False)
     audio_generated = models.BooleanField(default=False)
     status = models.CharField(max_length=50, default='PROCESSING')
+    processing_stage = models.CharField(max_length=50, choices=STAGE_CHOICES, default='pending')
+    stage_progress = models.IntegerField(default=0)
+    stage_message = models.CharField(max_length=255, blank=True, null=True)
     
     class Meta:
         db_table = 'processing_results'
@@ -27,6 +41,15 @@ class ProcessingResult(models.Model):
 
     def __str__(self):
         return f"{self.document_title} - {self.created_at}"
+    
+    def update_stage(self, stage, progress=None, message=None):
+        """Helper method to update processing stage details."""
+        self.processing_stage = stage
+        if progress is not None:
+            self.stage_progress = progress
+        if message is not None:
+            self.stage_message = message
+        self.save(update_fields=['processing_stage', 'stage_progress', 'stage_message'])
     
     def delete(self, *args, **kwargs):
         # Use Django's storage to delete files from R2
