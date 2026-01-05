@@ -3,7 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 import time
 import uuid
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, StreamingHttpResponse
+import json
 import requests
 from django.conf import settings
 import os
@@ -357,3 +358,165 @@ def check_processing_status(request):
         })
     
     return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def processing_status_stream(request, pk):
+    """
+    SSE endpoint that streams processing status updates for a specific document.
+    The connection stays open and sends updates whenever the status changes.
+    """
+    user = request.user
+    
+    def event_stream():
+        """Generator function that yields SSE-formatted data"""
+        try:
+            # Verify the document exists and belongs to user
+            result = ProcessingResult.objects.get(pk=pk, user=user)
+            
+            last_status = None
+            last_stage = None
+            last_progress = None
+            
+            # Keep connection alive and check for updates
+            while True:
+                # Refresh data from database
+                result.refresh_from_db()
+                
+                # Check if status/stage changed
+                current_status = result.status
+                current_stage = result.processing_stage
+                current_progress = result.stage_progress
+                
+                status_changed = (
+                    last_status != current_status or
+                    last_stage != current_stage or
+                    last_progress != current_progress
+                )
+                
+                if status_changed:
+                    # Prepare data to send
+                    data = {
+                        'id': str(result.id),
+                        'status': result.status,
+                        'processing_stage': result.processing_stage,
+                        'stage_progress': result.stage_progress,
+                        'stage_message': result.stage_message,
+                        'stage_label': result.get_processing_stage_display(),
+                        'quiz_generated': result.quiz_generated,
+                        'pdf_generated': result.pdf_generated,
+                        'audio_generated': result.audio_generated,
+                        'is_processing': result.status == 'PROCESSING',
+                        'timestamp': timezone.now().isoformat()
+                    }
+                    
+                    # Format as SSE
+                    yield f"data: {json.dumps(data)}\n\n"
+                    
+                    # Update tracking variables
+                    last_status = current_status
+                    last_stage = current_stage
+                    last_progress = current_progress
+                    
+                    # If processing is complete, close connection
+                    if result.status in ['COMPLETED', 'FAILED']:
+                        yield f"event: close\ndata: {json.dumps({'message': 'Processing finished'})}\n\n"
+                        break
+                
+                # Wait before checking again (1 second interval)
+                time.sleep(1)
+                
+        except ProcessingResult.DoesNotExist:
+            error_data = {'error': 'Document not found'}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except Exception as e:
+            error_data = {'error': str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+    
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream'
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # Disable buffering in nginx
+    response['Connection'] = 'keep-alive'
+    
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def all_processing_status_stream(request):
+    """
+    SSE endpoint that streams status updates for ALL user's documents.
+    Useful for dashboard view where multiple documents might be processing.
+    """
+    user = request.user
+    
+    def event_stream():
+        """Generator function that yields SSE-formatted data for all documents"""
+        try:
+            last_states = {}
+            
+            while True:
+                # Get all user's processing results
+                results = ProcessingResult.objects.filter(user=user)
+                
+                # Check if any have processing documents
+                has_processing = results.filter(status='PROCESSING').exists()
+                
+                updates = []
+                for result in results:
+                    result_id = str(result.id)
+                    current_state = (
+                        result.status,
+                        result.processing_stage,
+                        result.stage_progress
+                    )
+                    
+                    # Check if this document's state changed
+                    if last_states.get(result_id) != current_state:
+                        updates.append({
+                            'id': result_id,
+                            'status': result.status,
+                            'processing_stage': result.processing_stage,
+                            'stage_progress': result.stage_progress,
+                            'stage_message': result.stage_message,
+                            'stage_label': result.get_processing_stage_display(),
+                            'quiz_generated': result.quiz_generated,
+                            'pdf_generated': result.pdf_generated,
+                            'audio_generated': result.audio_generated,
+                            'document_title': result.document_title,
+                            'created_at': result.created_at.isoformat(),
+                        })
+                        last_states[result_id] = current_state
+                
+                # Send updates if any
+                if updates:
+                    data = {
+                        'updates': updates,
+                        'timestamp': timezone.now().isoformat()
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+                
+                # If no processing documents, send keepalive and close
+                if not has_processing:
+                    yield f"event: complete\ndata: {json.dumps({'message': 'All processing complete'})}\n\n"
+                    break
+                
+                # Wait before checking again
+                time.sleep(1)
+                
+        except Exception as e:
+            error_data = {'error': str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+    
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream'
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    response['Connection'] = 'keep-alive'
+    
+    return response
