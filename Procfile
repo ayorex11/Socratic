@@ -1,1 +1,1 @@
-web: gunicorn Config.wsgi:application
+web: gunicorn Config.wsgi:application --workers 4 --threads 2 --timeout 120 --keep-alive 5
