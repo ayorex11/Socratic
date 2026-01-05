@@ -342,29 +342,10 @@ def delete_processing_result(request, pk):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def check_processing_status(request):
-    """Check status of all processing results"""
-    user = request.user
-    results = ProcessingResult.objects.filter(user=user)
-    
-    data = []
-    for result in results:
-        data.append({
-            'id': str(result.id),
-            'status': result.status,
-            'quiz_generated': result.quiz_generated,
-            'pdf_generated': result.pdf_generated,
-            'audio_generated': result.audio_generated,
-        })
-    
-    return Response(data)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
 def processing_status_stream(request, pk):
     """
     SSE endpoint that streams processing status updates for a specific document.
-    The connection stays open and sends updates whenever the status changes.
+    Authentication happens via standard Authorization header (handled by DRF).
     """
     user = request.user
     
@@ -372,74 +353,122 @@ def processing_status_stream(request, pk):
         """Generator function that yields SSE-formatted data"""
         try:
             # Verify the document exists and belongs to user
-            result = ProcessingResult.objects.get(pk=pk, user=user)
+            try:
+                result = ProcessingResult.objects.get(pk=pk, user=user)
+            except ProcessingResult.DoesNotExist:
+                yield f"event: error\ndata: {json.dumps({'error': 'Document not found'})}\n\n"
+                return
             
             last_status = None
             last_stage = None
             last_progress = None
+            retry_count = 0
+            max_retries = 180  # 3 minutes with 1-second intervals
+            
+            # Send initial state immediately
+            initial_data = {
+                'id': str(result.id),
+                'status': result.status,
+                'processing_stage': result.processing_stage,
+                'stage_progress': result.stage_progress,
+                'stage_message': result.stage_message,
+                'stage_label': result.get_processing_stage_display(),
+                'quiz_generated': result.quiz_generated,
+                'pdf_generated': result.pdf_generated,
+                'audio_generated': result.audio_generated,
+                'is_processing': result.status == 'PROCESSING',
+                'timestamp': timezone.now().isoformat()
+            }
+            yield f"data: {json.dumps(initial_data)}\n\n"
+            
+            last_status = result.status
+            last_stage = result.processing_stage
+            last_progress = result.stage_progress
             
             # Keep connection alive and check for updates
-            while True:
-                # Refresh data from database
-                result.refresh_from_db()
-                
-                # Check if status/stage changed
-                current_status = result.status
-                current_stage = result.processing_stage
-                current_progress = result.stage_progress
-                
-                status_changed = (
-                    last_status != current_status or
-                    last_stage != current_stage or
-                    last_progress != current_progress
-                )
-                
-                if status_changed:
-                    # Prepare data to send
-                    data = {
-                        'id': str(result.id),
-                        'status': result.status,
-                        'processing_stage': result.processing_stage,
-                        'stage_progress': result.stage_progress,
-                        'stage_message': result.stage_message,
-                        'stage_label': result.get_processing_stage_display(),
-                        'quiz_generated': result.quiz_generated,
-                        'pdf_generated': result.pdf_generated,
-                        'audio_generated': result.audio_generated,
-                        'is_processing': result.status == 'PROCESSING',
-                        'timestamp': timezone.now().isoformat()
-                    }
+            while retry_count < max_retries:
+                try:
+                    # Refresh data from database
+                    result.refresh_from_db()
                     
-                    # Format as SSE
-                    yield f"data: {json.dumps(data)}\n\n"
+                    # Check if status/stage changed
+                    current_status = result.status
+                    current_stage = result.processing_stage
+                    current_progress = result.stage_progress
                     
-                    # Update tracking variables
-                    last_status = current_status
-                    last_stage = current_stage
-                    last_progress = current_progress
+                    status_changed = (
+                        last_status != current_status or
+                        last_stage != current_stage or
+                        last_progress != current_progress
+                    )
                     
-                    # If processing is complete, close connection
-                    if result.status in ['COMPLETED', 'FAILED']:
-                        yield f"event: close\ndata: {json.dumps({'message': 'Processing finished'})}\n\n"
-                        break
+                    if status_changed:
+                        # Prepare data to send
+                        data = {
+                            'id': str(result.id),
+                            'status': result.status,
+                            'processing_stage': result.processing_stage,
+                            'stage_progress': result.stage_progress,
+                            'stage_message': result.stage_message,
+                            'stage_label': result.get_processing_stage_display(),
+                            'quiz_generated': result.quiz_generated,
+                            'pdf_generated': result.pdf_generated,
+                            'audio_generated': result.audio_generated,
+                            'is_processing': result.status == 'PROCESSING',
+                            'timestamp': timezone.now().isoformat()
+                        }
+                        
+                        # Format as SSE
+                        yield f"data: {json.dumps(data)}\n\n"
+                        
+                        # Update tracking variables
+                        last_status = current_status
+                        last_stage = current_stage
+                        last_progress = current_progress
+                        
+                        # Reset retry count on successful update
+                        retry_count = 0
+                        
+                        # If processing is complete or failed, close connection
+                        if result.status in ['COMPLETED', 'FAILED']:
+                            yield f"event: close\ndata: {json.dumps({'message': 'Processing finished', 'status': result.status})}\n\n"
+                            return
+                    else:
+                        # Send keepalive comment every 15 seconds
+                        if retry_count % 15 == 0:
+                            yield f": keepalive\n\n"
+                    
+                    # Wait before checking again
+                    time.sleep(1)
+                    retry_count += 1
+                    
+                except Exception as db_error:
+                    yield f"event: error\ndata: {json.dumps({'error': f'Database error: {str(db_error)}'})}\n\n"
+                    return
+            
+            # Connection timeout
+            yield f"event: timeout\ndata: {json.dumps({'message': 'Connection timeout - please refresh'})}\n\n"
                 
-                # Wait before checking again (1 second interval)
-                time.sleep(1)
-                
-        except ProcessingResult.DoesNotExist:
-            error_data = {'error': 'Document not found'}
-            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
         except Exception as e:
-            error_data = {'error': str(e)}
+            error_data = {'error': f'Unexpected error: {str(e)}'}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
     
     response = StreamingHttpResponse(
         event_stream(),
         content_type='text/event-stream'
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'  
+    
+    # Critical SSE headers
+    response['Cache-Control'] = 'no-cache, no-transform'
+    response['X-Accel-Buffering'] = 'no'
     response['Connection'] = 'keep-alive'
+    response['Content-Encoding'] = 'none'  # Prevent compression
+    
+    # CORS headers for SSE
+    origin = request.headers.get('Origin')
+    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://socratic-frontend-ashy.vercel.app']:
+        response['Access-Control-Allow-Origin'] = origin
+        response['Access-Control-Allow-Credentials'] = 'true'
     
     return response
 
@@ -457,66 +486,121 @@ def all_processing_status_stream(request):
         """Generator function that yields SSE-formatted data for all documents"""
         try:
             last_states = {}
+            retry_count = 0
+            max_retries = 180  # 3 minutes
             
-            while True:
-                # Get all user's processing results
-                results = ProcessingResult.objects.filter(user=user)
+            # Send initial state
+            results = ProcessingResult.objects.filter(user=user)
+            initial_updates = []
+            
+            for result in results:
+                result_id = str(result.id)
+                state = (result.status, result.processing_stage, result.stage_progress)
+                last_states[result_id] = state
                 
-                # Check if any have processing documents
-                has_processing = results.filter(status='PROCESSING').exists()
-                
-                updates = []
-                for result in results:
-                    result_id = str(result.id)
-                    current_state = (
-                        result.status,
-                        result.processing_stage,
-                        result.stage_progress
-                    )
+                initial_updates.append({
+                    'id': result_id,
+                    'status': result.status,
+                    'processing_stage': result.processing_stage,
+                    'stage_progress': result.stage_progress,
+                    'stage_message': result.stage_message,
+                    'stage_label': result.get_processing_stage_display(),
+                    'quiz_generated': result.quiz_generated,
+                    'pdf_generated': result.pdf_generated,
+                    'audio_generated': result.audio_generated,
+                    'document_title': result.document_title,
+                    'created_at': result.created_at.isoformat(),
+                })
+            
+            if initial_updates:
+                initial_data = {
+                    'updates': initial_updates,
+                    'timestamp': timezone.now().isoformat()
+                }
+                yield f"data: {json.dumps(initial_data)}\n\n"
+            
+            while retry_count < max_retries:
+                try:
+                    # Get all user's processing results
+                    results = ProcessingResult.objects.filter(user=user)
                     
-                    # Check if this document's state changed
-                    if last_states.get(result_id) != current_state:
-                        updates.append({
-                            'id': result_id,
-                            'status': result.status,
-                            'processing_stage': result.processing_stage,
-                            'stage_progress': result.stage_progress,
-                            'stage_message': result.stage_message,
-                            'stage_label': result.get_processing_stage_display(),
-                            'quiz_generated': result.quiz_generated,
-                            'pdf_generated': result.pdf_generated,
-                            'audio_generated': result.audio_generated,
-                            'document_title': result.document_title,
-                            'created_at': result.created_at.isoformat(),
-                        })
-                        last_states[result_id] = current_state
-                
-                # Send updates if any
-                if updates:
-                    data = {
-                        'updates': updates,
-                        'timestamp': timezone.now().isoformat()
-                    }
-                    yield f"data: {json.dumps(data)}\n\n"
-                
-                # If no processing documents, send keepalive and close
-                if not has_processing:
-                    yield f"event: complete\ndata: {json.dumps({'message': 'All processing complete'})}\n\n"
-                    break
-                
-                # Wait before checking again
-                time.sleep(1)
+                    # Check if any have processing documents
+                    has_processing = results.filter(status__in=['PROCESSING', 'PENDING']).exists()
+                    
+                    updates = []
+                    for result in results:
+                        result_id = str(result.id)
+                        current_state = (
+                            result.status,
+                            result.processing_stage,
+                            result.stage_progress
+                        )
+                        
+                        # Check if this document's state changed
+                        if last_states.get(result_id) != current_state:
+                            updates.append({
+                                'id': result_id,
+                                'status': result.status,
+                                'processing_stage': result.processing_stage,
+                                'stage_progress': result.stage_progress,
+                                'stage_message': result.stage_message,
+                                'stage_label': result.get_processing_stage_display(),
+                                'quiz_generated': result.quiz_generated,
+                                'pdf_generated': result.pdf_generated,
+                                'audio_generated': result.audio_generated,
+                                'document_title': result.document_title,
+                                'created_at': result.created_at.isoformat(),
+                            })
+                            last_states[result_id] = current_state
+                    
+                    # Send updates if any
+                    if updates:
+                        data = {
+                            'updates': updates,
+                            'timestamp': timezone.now().isoformat()
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+                        retry_count = 0  # Reset on successful update
+                    
+                    # If no processing documents, send completion and close
+                    if not has_processing:
+                        yield f"event: complete\ndata: {json.dumps({'message': 'All processing complete'})}\n\n"
+                        return
+                    
+                    # Send keepalive
+                    if retry_count % 15 == 0:
+                        yield f": keepalive\n\n"
+                    
+                    # Wait before checking again
+                    time.sleep(1)
+                    retry_count += 1
+                    
+                except Exception as db_error:
+                    yield f"event: error\ndata: {json.dumps({'error': f'Database error: {str(db_error)}'})}\n\n"
+                    return
+            
+            # Timeout
+            yield f"event: timeout\ndata: {json.dumps({'message': 'Connection timeout'})}\n\n"
                 
         except Exception as e:
-            error_data = {'error': str(e)}
+            error_data = {'error': f'Unexpected error: {str(e)}'}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
     
     response = StreamingHttpResponse(
         event_stream(),
         content_type='text/event-stream'
     )
-    response['Cache-Control'] = 'no-cache'
+    
+    # Critical SSE headers
+    response['Cache-Control'] = 'no-cache, no-transform'
     response['X-Accel-Buffering'] = 'no'
     response['Connection'] = 'keep-alive'
+    response['Content-Encoding'] = 'none'
+    
+    # CORS headers for SSE
+    origin = request.headers.get('Origin')
+    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://socratic-frontend-ashy.vercel.app']:
+        response['Access-Control-Allow-Origin'] = origin
+        response['Access-Control-Allow-Credentials'] = 'true'
     
     return response
