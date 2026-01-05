@@ -438,7 +438,7 @@ def processing_status_stream(request, pk):
         content_type='text/event-stream'
     )
     response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'  # Disable buffering in nginx
+    response['X-Accel-Buffering'] = 'no'  
     response['Connection'] = 'keep-alive'
     
     return response
