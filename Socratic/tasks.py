@@ -29,6 +29,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         
         # STAGE 1: Starting Processing
         result.status = 'PROCESSING'
+        result.save()
         result.update_stage('extracting_text', progress=10, message='Starting text extraction...')
         
         LogEntry.objects.create(
@@ -226,6 +227,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         end_time = time.time()
         result.processing_time = end_time - start_time
         result.status = 'COMPLETED'
+        result.save()
         result.update_stage('completed', progress=100, message='All processing completed successfully!')
 
         LogEntry.objects.create(
@@ -242,6 +244,7 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
                 result.status = 'FAILED'
                 result.audio_generated = False
                 result.pdf_generated = False
+                result.save()
                 result.update_stage('failed', progress=0, message=str(e))
             except Exception as save_error:
                 print(f"Failed to update result status: {save_error}")
