@@ -340,19 +340,32 @@ def delete_processing_result(request, pk):
         )
     
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
+from django.views.decorators.http import require_http_methods
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+@require_http_methods(["GET"])
 def processing_status_stream(request, pk):
-    """
-    SSE endpoint that streams processing status updates for a specific document.
-    Authentication happens via standard Authorization header (handled by DRF).
-    """
-    user = request.user
+    """SSE endpoint for single document"""
+    # Manual JWT authentication
+    try:
+        auth = JWTAuthentication()
+        user_auth = auth.authenticate(request)
+        if user_auth is None:
+            return HttpResponse(
+                json.dumps({'error': 'Authentication required'}),
+                status=401,
+                content_type='application/json'
+            )
+        user = user_auth[0]
+    except Exception as e:
+        return HttpResponse(
+            json.dumps({'error': 'Invalid token'}),
+            status=401,
+            content_type='application/json'
+        )
     
     def event_stream():
-        """Generator function that yields SSE-formatted data"""
         try:
-            # Verify the document exists and belongs to user
             try:
                 result = ProcessingResult.objects.get(pk=pk, user=user)
             except ProcessingResult.DoesNotExist:
@@ -363,9 +376,8 @@ def processing_status_stream(request, pk):
             last_stage = None
             last_progress = None
             retry_count = 0
-            max_retries = 180  # 3 minutes with 1-second intervals
+            max_retries = 180
             
-            # Send initial state immediately
             initial_data = {
                 'id': str(result.id),
                 'status': result.status,
@@ -385,13 +397,10 @@ def processing_status_stream(request, pk):
             last_stage = result.processing_stage
             last_progress = result.stage_progress
             
-            # Keep connection alive and check for updates
             while retry_count < max_retries:
                 try:
-                    # Refresh data from database
                     result.refresh_from_db()
                     
-                    # Check if status/stage changed
                     current_status = result.status
                     current_stage = result.processing_stage
                     current_progress = result.stage_progress
@@ -403,7 +412,6 @@ def processing_status_stream(request, pk):
                     )
                     
                     if status_changed:
-                        # Prepare data to send
                         data = {
                             'id': str(result.id),
                             'status': result.status,
@@ -418,27 +426,21 @@ def processing_status_stream(request, pk):
                             'timestamp': timezone.now().isoformat()
                         }
                         
-                        # Format as SSE
                         yield f"data: {json.dumps(data)}\n\n"
                         
-                        # Update tracking variables
                         last_status = current_status
                         last_stage = current_stage
                         last_progress = current_progress
                         
-                        # Reset retry count on successful update
                         retry_count = 0
                         
-                        # If processing is complete or failed, close connection
                         if result.status in ['COMPLETED', 'FAILED']:
                             yield f"event: close\ndata: {json.dumps({'message': 'Processing finished', 'status': result.status})}\n\n"
                             return
                     else:
-                        # Send keepalive comment every 15 seconds
                         if retry_count % 15 == 0:
                             yield f": keepalive\n\n"
                     
-                    # Wait before checking again
                     time.sleep(1)
                     retry_count += 1
                     
@@ -446,7 +448,6 @@ def processing_status_stream(request, pk):
                     yield f"event: error\ndata: {json.dumps({'error': f'Database error: {str(db_error)}'})}\n\n"
                     return
             
-            # Connection timeout
             yield f"event: timeout\ndata: {json.dumps({'message': 'Connection timeout - please refresh'})}\n\n"
                 
         except Exception as e:
@@ -458,13 +459,11 @@ def processing_status_stream(request, pk):
         content_type='text/event-stream'
     )
     
-    # Critical SSE headers
     response['Cache-Control'] = 'no-cache, no-transform'
     response['X-Accel-Buffering'] = 'no'
     response['Connection'] = 'keep-alive'
-    response['Content-Encoding'] = 'none'  # Prevent compression
+    response['Content-Encoding'] = 'none'
     
-    # CORS headers for SSE
     origin = request.headers.get('Origin')
     if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://socratic-frontend-ashy.vercel.app']:
         response['Access-Control-Allow-Origin'] = origin
@@ -473,23 +472,33 @@ def processing_status_stream(request, pk):
     return response
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@require_http_methods(["GET"])
 def all_processing_status_stream(request):
-    """
-    SSE endpoint that streams status updates for ALL user's documents.
-    Useful for dashboard view where multiple documents might be processing.
-    """
-    user = request.user
+    """SSE endpoint for all documents"""
+    # Manual JWT authentication
+    try:
+        auth = JWTAuthentication()
+        user_auth = auth.authenticate(request)
+        if user_auth is None:
+            return HttpResponse(
+                json.dumps({'error': 'Authentication required'}),
+                status=401,
+                content_type='application/json'
+            )
+        user = user_auth[0]
+    except Exception as e:
+        return HttpResponse(
+            json.dumps({'error': 'Invalid token'}),
+            status=401,
+            content_type='application/json'
+        )
     
     def event_stream():
-        """Generator function that yields SSE-formatted data for all documents"""
         try:
             last_states = {}
             retry_count = 0
-            max_retries = 180  # 3 minutes
+            max_retries = 180
             
-            # Send initial state
             results = ProcessingResult.objects.filter(user=user)
             initial_updates = []
             
@@ -521,10 +530,8 @@ def all_processing_status_stream(request):
             
             while retry_count < max_retries:
                 try:
-                    # Get all user's processing results
                     results = ProcessingResult.objects.filter(user=user)
                     
-                    # Check if any have processing documents
                     has_processing = results.filter(status__in=['PROCESSING', 'PENDING']).exists()
                     
                     updates = []
@@ -536,7 +543,6 @@ def all_processing_status_stream(request):
                             result.stage_progress
                         )
                         
-                        # Check if this document's state changed
                         if last_states.get(result_id) != current_state:
                             updates.append({
                                 'id': result_id,
@@ -553,25 +559,21 @@ def all_processing_status_stream(request):
                             })
                             last_states[result_id] = current_state
                     
-                    # Send updates if any
                     if updates:
                         data = {
                             'updates': updates,
                             'timestamp': timezone.now().isoformat()
                         }
                         yield f"data: {json.dumps(data)}\n\n"
-                        retry_count = 0  # Reset on successful update
+                        retry_count = 0
                     
-                    # If no processing documents, send completion and close
                     if not has_processing:
                         yield f"event: complete\ndata: {json.dumps({'message': 'All processing complete'})}\n\n"
                         return
                     
-                    # Send keepalive
                     if retry_count % 15 == 0:
                         yield f": keepalive\n\n"
                     
-                    # Wait before checking again
                     time.sleep(1)
                     retry_count += 1
                     
@@ -579,7 +581,6 @@ def all_processing_status_stream(request):
                     yield f"event: error\ndata: {json.dumps({'error': f'Database error: {str(db_error)}'})}\n\n"
                     return
             
-            # Timeout
             yield f"event: timeout\ndata: {json.dumps({'message': 'Connection timeout'})}\n\n"
                 
         except Exception as e:
@@ -591,13 +592,11 @@ def all_processing_status_stream(request):
         content_type='text/event-stream'
     )
     
-    # Critical SSE headers
     response['Cache-Control'] = 'no-cache, no-transform'
     response['X-Accel-Buffering'] = 'no'
     response['Connection'] = 'keep-alive'
     response['Content-Encoding'] = 'none'
     
-    # CORS headers for SSE
     origin = request.headers.get('Origin')
     if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://socratic-frontend-ashy.vercel.app']:
         response['Access-Control-Allow-Origin'] = origin
