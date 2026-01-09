@@ -77,7 +77,7 @@ def start_quiz(request, pk):
         # Check access permissions
         if result.user != user:
             # Not their own document - check community access
-            if not user.is_premium_active and result.user.is_premium_active:
+            if not user.premium_user and result.user.premium_user:
                 LogEntry.objects.create(
                     user=user, 
                     timestamp=timezone.now(),
@@ -178,7 +178,7 @@ def submit_answer(request, pk):
         
         # Check access permissions
         if result.user != user:
-            if not user.is_premium_active and result.user.is_premium_active:
+            if not user.premium_user and result.user.premium_user:
                 return Response(
                     {'error': 'Premium subscription required to access this quiz.'}, 
                     status=status.HTTP_403_FORBIDDEN
@@ -309,7 +309,7 @@ def get_my_attempts(request, pk):
         
         # Check access
         if result.user != user:
-            if not user.is_premium_active and result.user.is_premium_active:
+            if not user.premium_user and result.user.premium_user:
                 return Response(
                     {'error': 'Premium subscription required.'}, 
                     status=status.HTTP_403_FORBIDDEN
