@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 
 ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socratic-frontend-ashy.vercel.app','127.0.0.1']
