@@ -177,7 +177,18 @@ def get_processing_result(request, pk):
 def download_pdf(request, pk):
     user = request.user
     try:
-        result = ProcessingResult.objects.get(pk=pk, user=user)
+        # First try to get the document (any document, not just user's)
+        result = ProcessingResult.objects.get(pk=pk)
+        
+        # Check access permissions
+        # Users can access their own documents OR community documents based on premium status
+        if result.user != user:
+            # This is someone else's document - check if user has access
+            if not user.is_premium_active and result.user.is_premium_active:
+                return Response(
+                    {'error': 'Premium subscription required to access this document'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         
         if not result.pdf_report:
             return Response(
@@ -208,7 +219,7 @@ def download_pdf(request, pk):
                 timestamp=timezone.now(),
                 level='Normal',
                 status_code='200',
-                message='PDF downloaded successfully'
+                message=f'PDF downloaded successfully (document: {pk})'
             )
             
             return file_response
@@ -221,8 +232,7 @@ def download_pdf(request, pk):
 
     except ProcessingResult.DoesNotExist:
         return Response(
-            {'error': 'Processing result not found',
-             'status': result.status},
+            {'error': 'Processing result not found'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
@@ -234,8 +244,7 @@ def download_pdf(request, pk):
             message=f'Unexpected error in download_pdf_file: {str(e)}'
         )
         return Response(
-            {'error': 'Server error',
-             'status': result.status},
+            {'error': 'Server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -246,7 +255,18 @@ def download_pdf(request, pk):
 def download_audio(request, pk):
     user = request.user
     try:
-        result = ProcessingResult.objects.get(pk=pk, user=user)
+        # First try to get the document (any document, not just user's)
+        result = ProcessingResult.objects.get(pk=pk)
+        
+        # Check access permissions
+        # Users can access their own documents OR community documents based on premium status
+        if result.user != user:
+            # This is someone else's document - check if user has access
+            if not user.is_premium_active and result.user.is_premium_active:
+                return Response(
+                    {'error': 'Premium subscription required to access this document'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         
         if not result.audio_summary:
             return Response(
@@ -277,7 +297,7 @@ def download_audio(request, pk):
                 timestamp=timezone.now(),
                 level='Normal',
                 status_code='200',
-                message='Audio downloaded successfully'
+                message=f'Audio downloaded successfully (document: {pk})'
             )
             
             return file_response
@@ -290,8 +310,7 @@ def download_audio(request, pk):
 
     except ProcessingResult.DoesNotExist:
         return Response(
-            {'error': 'Processing result not found', 
-            'status': result.status},
+            {'error': 'Processing result not found'}, 
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
@@ -303,8 +322,7 @@ def download_audio(request, pk):
             message=f'Unexpected error in download_audio_file: {str(e)}'
         )
         return Response(
-            {'error': 'Server error',
-             'status': result.status},
+            {'error': 'Server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
@@ -610,10 +628,13 @@ def all_processing_status_stream(request):
 def get_all_documents(request):
     user = request.user
     
-    if user.premium_user:
-        results = ProcessingResult.objects.exclude(user=user)
+    # Premium users see all community docs, free users only see free community docs
+    if user.is_premium_active:
+        results = ProcessingResult.objects.exclude(user=user).filter(status='COMPLETED')
     else:
-        results = ProcessingResult.objects.filter(user__premium_user=False).exclude(user=user)
+        results = ProcessingResult.objects.filter(
+            user__is_premium_active=False
+        ).exclude(user=user).filter(status='COMPLETED')
 
     results = results.prefetch_related('quizzes')
 
@@ -624,7 +645,8 @@ def get_all_documents(request):
             'document_title': result.document_title,
             'audio_summary': result.audio_summary.url if result.audio_summary else None,
             'pdf_report': result.pdf_report.url if result.pdf_report else None,
-            'Quiz': list(result.quizzes.values('id', 'name'))
+            'Quiz': list(result.quizzes.values('id', 'name')),
+            'created_at': result.created_at.isoformat() if result.created_at else None,
         })
 
     return Response(data)
