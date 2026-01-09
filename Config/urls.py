@@ -39,5 +39,6 @@ urlpatterns = [
     path('log-entries/', include('logs.urls')),
     path('payment/', include('payment.urls')),
     path('quiz/', include('Quiz.urls')),
+    path('accounts/', include('allauth.urls')),
 ]
 

@@ -3,4 +3,5 @@ from . import views
 
 urlpatterns = [
     path('get_all_users/', views.get_all_users),
+    path('google/', views.google_auth),
 ]
