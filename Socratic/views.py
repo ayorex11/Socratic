@@ -28,8 +28,8 @@ from datetime import datetime
 from .tasks import process_document_task
 from django.utils import timezone
 from .utils.file_helpers import _save_temp_file, _cleanup_temp_file
-
-
+from Account.models import User as CustomUser
+from Quiz.models import Quiz
 @swagger_auto_schema(methods=['POST'], request_body=DocumentProcessingSerializer)
 @api_view(['POST'])
 @throttle_classes([AnonRateThrottle, UserRateThrottle, UserBurstRateThrottle, UserSustainedRateThrottle])
@@ -603,3 +603,29 @@ def all_processing_status_stream(request):
         response['Access-Control-Allow-Credentials'] = 'true'
     
     return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_documents(request):
+    user = request.user
+    
+    if user.premium_user:
+        results = ProcessingResult.objects.exclude(user=user)
+    else:
+        results = ProcessingResult.objects.filter(user__premium_user=False).exclude(user=user)
+
+    results = results.prefetch_related('quizzes')
+
+    data = []
+    for result in results:
+        data.append({
+            'id': result.id,
+            'document_title': result.document_title,
+            'audio_summary': result.audio_summary.url if result.audio_summary else None,
+            'pdf_report': result.pdf_report.url if result.pdf_report else None,
+            'Quiz': list(result.quizzes.values('id', 'name'))
+        })
+
+    return Response(data)
+    

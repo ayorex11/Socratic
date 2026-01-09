@@ -9,4 +9,5 @@ urlpatterns = [
     path('delete/<uuid:pk>/', views.delete_processing_result),
     path('processing-status-stream/<uuid:pk>/', views.processing_status_stream),
     path('all-processing-status-stream/', views.all_processing_status_stream),
+    path('get_all_documents/', views.get_all_documents),
 ]
