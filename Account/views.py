@@ -38,24 +38,42 @@ def google_auth(request):
     Creates new user if doesn't exist, logs in if exists
     """
     try:
+        # Get the credential (ID token) from the request
+        credential = request.data.get('credential')
         access_token = request.data.get('access_token')
         
-        if not access_token:
+        # Use whichever token was provided
+        token = credential or access_token
+        
+        if not token:
             return Response(
-                {'error': 'Access token is required'},
+                {'error': 'Google token is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         # Verify the token with Google
         try:
             idinfo = id_token.verify_oauth2_token(
-                access_token,
+                token,
                 requests.Request(),
                 os.getenv('GOOGLE_OAUTH_CLIENT_ID')
             )
+            
+            # Check if the token is for the correct client ID
+            if idinfo['aud'] != os.getenv('GOOGLE_OAUTH_CLIENT_ID'):
+                return Response(
+                    {'error': 'Invalid token audience'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+        except ValueError as e:
+            return Response(
+                {'error': f'Invalid Google token: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             return Response(
-                {'error': 'Invalid Google token'},
+                {'error': f'Token verification failed: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -63,6 +81,7 @@ def google_auth(request):
         email = idinfo.get('email')
         first_name = idinfo.get('given_name', '')
         last_name = idinfo.get('family_name', '')
+        google_id = idinfo.get('sub')
         
         if not email:
             return Response(
@@ -70,34 +89,39 @@ def google_auth(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check if user exists
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                'username': email.split('@')[0],
-                'first_name': first_name,
-                'last_name': last_name,
-                'is_active': True,  # Auto-activate Google users
-            }
-        )
-
-        # If username collision, append number
-        if created:
+        # Check if user exists by email
+        try:
+            user = User.objects.get(email=email)
+            created = False
+        except User.DoesNotExist:
+            # Create new user
             base_username = email.split('@')[0]
+            username = base_username
+            
+            # Handle username collisions
             counter = 1
-            while User.objects.filter(username=user.username).exclude(id=user.id).exists():
-                user.username = f"{base_username}{counter}"
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
                 counter += 1
-            user.save()
+            
+            user = User.objects.create(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                is_active=True,  # Auto-activate Google users
+            )
+            created = True
 
-        # Generate JWT tokens
+        # Generate JWT tokens with expiration info
         refresh = RefreshToken.for_user(user)
+        access_token_obj = refresh.access_token
         
         return Response({
-            'access': str(refresh.access_token),
+            'access': str(access_token_obj),
             'refresh': str(refresh),
-            'access_expiration': str(refresh.access_token.payload['exp']),
-            'refresh_expiration': str(refresh.payload['exp']),
+            'access_expiration': access_token_obj['exp'],
+            'refresh_expiration': refresh['exp'],
             'user': {
                 'id': user.id,
                 'username': user.username,
@@ -111,6 +135,6 @@ def google_auth(request):
 
     except Exception as e:
         return Response(
-            {'error': str(e)},
+            {'error': f'Authentication failed: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
