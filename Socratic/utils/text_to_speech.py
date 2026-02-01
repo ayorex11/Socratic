@@ -4,11 +4,15 @@ import uuid
 import re 
 from django.core.files.storage import default_storage
 from io import BytesIO
+from pydub import AudioSegment
+import tempfile
+import os
 
 class TextToSpeech:
     """
     Handles conversion of text to speech using gTTS (free)
     Generates MP3 files for audio summaries directly to R2
+    IMPROVED: Better chunking and concatenation for long content
     """
     
     @staticmethod
@@ -16,6 +20,7 @@ class TextToSpeech:
         """
         Generate audio file from text using gTTS
         Returns the file path in R2 storage
+        IMPROVED: Increased character limit from 5000 to 15000
         """
         try:
             if not text or len(text.strip()) < 10:
@@ -59,6 +64,7 @@ class TextToSpeech:
     def _prepare_text_for_tts(text):
         """
         Clean and prepare text for better TTS results by removing markdown/formatting noise.
+        IMPROVED: Increased limit from 5000 to 15000 characters
         """
         if not text:
             return ""
@@ -75,8 +81,8 @@ class TextToSpeech:
         # 3. Collapse excessive whitespace
         clean_text = re.sub(r'\s{2,}', ' ', clean_text).strip()
         
-        # 4. Limit text length (5000 is safe)
-        max_length = 5000 
+        # 4. IMPROVED: Increased limit from 5000 to 15000
+        max_length = 15000 
         if len(clean_text) > max_length:
             clean_text = clean_text[:max_length].rsplit('.', 1)[0] + "." 
         
@@ -87,9 +93,10 @@ class TextToSpeech:
         return clean_text
     
     @staticmethod
-    def generate_audio_chunked(text, filename_prefix="audio", max_chunk_length=1000):
+    def generate_audio_chunked(text, filename_prefix="audio", max_chunk_length=4000):
         """
-        Generate audio for long texts by chunking (if needed)
+        Generate audio for long texts by chunking and concatenating
+        IMPROVED: Now properly concatenates all chunks into a single audio file
         """
         try:
             if len(text) <= max_chunk_length:
@@ -110,21 +117,66 @@ class TextToSpeech:
             if current_chunk:
                 chunks.append(current_chunk.strip())
             
-            audio_files = []
-            for i, chunk in enumerate(chunks):
-                if chunk.strip():
-                    audio_path = TextToSpeech.generate_audio(
-                        chunk, 
-                        f"{filename_prefix}_part{i+1}"
-                    )
-                    if audio_path:
-                        audio_files.append(audio_path)
+            print(f"Generating {len(chunks)} audio chunks for concatenation")
             
-            return audio_files[0] if audio_files else None
+            # Generate audio for each chunk and concatenate
+            temp_files = []
+            combined_audio = None
+            
+            try:
+                for i, chunk in enumerate(chunks):
+                    if chunk.strip():
+                        # Generate TTS for chunk
+                        tts = gTTS(
+                            text=TextToSpeech._prepare_text_for_tts(chunk), 
+                            lang='en', 
+                            slow=False, 
+                            lang_check=False
+                        )
+                        
+                        # Save to temporary file
+                        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+                        tts.write_to_fp(temp_file)
+                        temp_file.close()
+                        temp_files.append(temp_file.name)
+                        
+                        # Load and concatenate
+                        audio_segment = AudioSegment.from_mp3(temp_file.name)
+                        if combined_audio is None:
+                            combined_audio = audio_segment
+                        else:
+                            # Add small pause between chunks (500ms)
+                            silence = AudioSegment.silent(duration=500)
+                            combined_audio = combined_audio + silence + audio_segment
+                
+                if combined_audio:
+                    # Export combined audio to buffer
+                    buffer = BytesIO()
+                    combined_audio.export(buffer, format='mp3')
+                    buffer.seek(0)
+                    
+                    # Save to R2
+                    unique_id = uuid.uuid4().hex[:8]
+                    filename = f"audio/{filename_prefix}_{unique_id}_full.mp3"
+                    file_path = default_storage.save(filename, buffer)
+                    
+                    print(f"Combined audio file generated successfully: {file_path}")
+                    return file_path
+                else:
+                    return None
+                    
+            finally:
+                # Clean up temporary files
+                for temp_file in temp_files:
+                    try:
+                        os.unlink(temp_file)
+                    except:
+                        pass
             
         except Exception as e:
             print(f"Chunked audio generation failed: {str(e)}")
-            return None
+            # Fallback to single chunk
+            return TextToSpeech.generate_audio(text[:15000], filename_prefix)
     
     @staticmethod
     def _split_into_sentences(text):
@@ -134,3 +186,19 @@ class TextToSpeech:
         import re
         sentences = re.split(r'[.!?]+', text)
         return [s.strip() for s in sentences if s.strip()]
+    
+    @staticmethod
+    def generate_audio_smart(text, filename_prefix="audio"):
+        """
+        Smart audio generation that automatically chooses between single and chunked
+        based on text length
+        """
+        # Clean text first
+        clean_text = TextToSpeech._prepare_text_for_tts(text)
+        
+        # If text is short enough, use single generation
+        if len(clean_text) <= 15000:
+            return TextToSpeech.generate_audio(text, filename_prefix)
+        else:
+            # Use chunked generation with concatenation
+            return TextToSpeech.generate_audio_chunked(text, filename_prefix)

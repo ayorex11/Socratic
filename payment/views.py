@@ -64,7 +64,7 @@ def initialize_deposit(request):
         }, status=status.HTTP_200_OK)
     
     # Generate unique reference for idempotency
-    unique_ref = f"socratic_{user.id}_{int(timezone.now().timestamp())}_{uuid.uuid4().hex[:8]}"
+    unique_ref = f"SocraSeek_{user.id}_{int(timezone.now().timestamp())}_{uuid.uuid4().hex[:8]}"
     
     url = "https://api.paystack.co/transaction/initialize"
     headers = {"authorization": f"Bearer {os.getenv('PRIVATE_KEY')}"}

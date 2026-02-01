@@ -21,7 +21,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = False
 
 
-ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socratic-frontend-ashy.vercel.app','127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socraseek.com','127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
@@ -90,11 +90,11 @@ WSGI_APPLICATION = 'Config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT', '6543'),
+        'NAME': os.getenv('PGDATABASE'),  
+        'USER': os.getenv('PGUSER'),     
+        'PASSWORD': os.getenv('PGPASSWORD'),  
+        'HOST': os.getenv('PGHOST'),      
+        'PORT': os.getenv('PGPORT', '5432'),  
         'OPTIONS': {
             'sslmode': 'require',
         },
@@ -189,15 +189,15 @@ ANYMAIL = {
 DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'
 
 # Allauth
-ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Socratic] '
+ACCOUNT_EMAIL_SUBJECT_PREFIX = '[SocraSeek] '
 SITE_ID = 1
-SITE_NAME = 'Socratic'
+SITE_NAME = 'SocraSeek'
 
 # Custom user model
 AUTH_USER_MODEL = 'Account.User'
 
 # URLs
-FRONTEND_URL = 'https://socratic-frontend-ashy.vercel.app'
+FRONTEND_URL = 'https://www.socraseek.com'
 DJANGO_SITE_URL = 'http://localhost:8000'
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_SIGNUP_FIELDS = ['email*']
@@ -246,7 +246,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8080",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    'https://socratic-frontend-ashy.vercel.app',
+    'https://www.socraseek.com',
 ]
 CORS_ALLOW_CREDENTIALS = True
 

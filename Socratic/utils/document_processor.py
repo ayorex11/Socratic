@@ -1,4 +1,4 @@
-import PyPDF2
+import fitz  # PyMuPDF
 from PIL import Image
 import os
 import re
@@ -8,31 +8,75 @@ import requests
 class DocumentProcessor:
     """
     Enhanced text extraction with comprehensive structural analysis
+    Now using PyMuPDF (fitz) for superior PDF extraction
     """
     
     @staticmethod
     def extract_text_from_pdf(file_path):
-        """Extract coherent text from PDF with structural preservation"""
+        """Extract coherent text from PDF with structural preservation using PyMuPDF"""
         try:
-            with open(file_path, 'rb') as file:
-                reader = PyPDF2.PdfReader(file)
-                full_text = ""
-                
-                # Extract text from all pages
-                for page_num, page in enumerate(reader.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        full_text += page_text + "\n"
-                
-                # Reconstruct paragraphs and filter non-content
-                processed_text = DocumentProcessor._reconstruct_paragraphs(full_text)
-                meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
+            # Open PDF with PyMuPDF
+            doc = fitz.open(file_path)
+            full_text = ""
+            
+            # Extract text from all pages with better structure preservation
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                # Extract text with layout preservation
+                page_text = page.get_text("text")
+                if page_text:
+                    full_text += page_text + "\n"
+            
+            doc.close()
+            
+            # Reconstruct paragraphs and filter non-content
+            processed_text = DocumentProcessor._reconstruct_paragraphs(full_text)
+            meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
 
-                
-                return meaningful_content.strip()
+            
+            return meaningful_content.strip()
                 
         except Exception as e:
             raise Exception(f"PDF extraction failed: {str(e)}")
+    
+    @staticmethod
+    def extract_text_from_pdf_chunked(file_path, chunk_size=50):
+        """
+        Extract text from large PDFs in chunks by page ranges
+        Returns a list of text chunks for processing large documents
+        """
+        try:
+            doc = fitz.open(file_path)
+            total_pages = len(doc)
+            chunks = []
+            
+            # Process in chunks
+            for start_page in range(0, total_pages, chunk_size):
+                end_page = min(start_page + chunk_size, total_pages)
+                chunk_text = ""
+                
+                for page_num in range(start_page, end_page):
+                    page = doc[page_num]
+                    page_text = page.get_text("text")
+                    if page_text:
+                        chunk_text += page_text + "\n"
+                
+                # Process chunk
+                processed_chunk = DocumentProcessor._reconstruct_paragraphs(chunk_text)
+                meaningful_chunk = DocumentProcessor._extract_meaningful_sections(processed_chunk)
+                
+                if meaningful_chunk and len(meaningful_chunk.strip()) > 100:
+                    chunks.append({
+                        'text': meaningful_chunk.strip(),
+                        'page_range': f"{start_page + 1}-{end_page}",
+                        'char_count': len(meaningful_chunk)
+                    })
+            
+            doc.close()
+            return chunks
+                
+        except Exception as e:
+            raise Exception(f"Chunked PDF extraction failed: {str(e)}")
     
     @staticmethod
     def _extract_meaningful_sections(text):
@@ -280,7 +324,6 @@ class DocumentProcessor:
             raise Exception(f"DOCX extraction failed: {str(e)}")
     
 
-
     @staticmethod
     def extract_text_from_image(file_path):
         """Extract text from images using OCR.space API"""
@@ -412,11 +455,11 @@ class DocumentProcessor:
         
         # Raw extraction
         if file_type.upper() == 'PDF':
-            with open(file_path, 'rb') as file:
-                reader = PyPDF2.PdfReader(file)
-                raw_text = ""
-                for page in reader.pages:
-                    raw_text += page.extract_text() + "\n"
+            doc = fitz.open(file_path)
+            raw_text = ""
+            for page in doc:
+                raw_text += page.get_text("text") + "\n"
+            doc.close()
         else:
             raw_text = "Debug available for PDF only"
         

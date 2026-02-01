@@ -3,7 +3,7 @@ from .gemini_config import GeminiConfig
 
 class AIProcessor:
     """
-    Enhanced AI processor using Google Gemini
+    Enhanced AI processor using Google Gemini with improved limits for free users
     """
     
     _model = None
@@ -54,7 +54,10 @@ class AIProcessor:
     
     @classmethod
     def _preprocess_study_text(cls, text):
-        """Ensure the text is suitable for processing"""
+        """
+        Ensure the text is suitable for processing
+        IMPROVED: Increased from 5 to 30 paragraphs for free users
+        """
         if not text:
             return ""
         
@@ -67,18 +70,21 @@ class AIProcessor:
             if len(para) >= 100 and len(para.split()) >= 15:
                 good_paragraphs.append(para)
         
-        # Use first 3-5 good paragraphs
-        selected_paragraphs = good_paragraphs[:5]
+        # IMPROVED: Use first 30 good paragraphs (was 5)
+        selected_paragraphs = good_paragraphs[:30]
         
         if not selected_paragraphs:
-            # Fallback: use whatever we have
-            return text[:8000]  # Increased limit for Gemini
+            # Fallback: use more text than before
+            return text[:50000]  # Increased from 8000
         
         return '\n\n'.join(selected_paragraphs)
     
     @classmethod
     def _generate_coherent_summary(cls, study_text, context_text):
-        """Generate a coherent, well-structured summary using Gemini"""
+        """
+        Generate a coherent, well-structured summary using Gemini
+        IMPROVED: Increased limits for better coverage
+        """
         try:
             # Prepare prompt for summarization
             if context_text:
@@ -87,12 +93,13 @@ class AIProcessor:
                 considering the context provided. Focus on key concepts, main ideas, and important details.
 
                 STUDY MATERIAL:
-                {study_text[:6000]}
+                {study_text[:50000]}
 
                 CONTEXT/PAST QUESTIONS:
-                {context_text[:2000]}
+                {context_text[:10000]}
 
                 Please provide a clear, concise summary that highlights the most important information.
+                Use markdown formatting with headings and bullet points as appropriate.
                 """
             else:
                 prompt = f"""
@@ -100,9 +107,10 @@ class AIProcessor:
                 Focus on key concepts, main ideas, and important details.
 
                 STUDY MATERIAL:
-                {study_text[:6000]}
+                {study_text[:50000]}
 
                 Please provide a clear, concise summary that highlights the most important information.
+                Use markdown formatting with headings and bullet points as appropriate.
                 """
             
             # Generate summary using Gemini
@@ -126,18 +134,21 @@ class AIProcessor:
     
     @classmethod
     def _generate_meaningful_questions(cls, study_text, context_text):
-        """Generate meaningful, coherent Q&A pairs using Gemini"""
+        """
+        Generate meaningful, coherent Q&A pairs using Gemini
+        IMPROVED: Increased from 5 to 15 questions for free users
+        """
         try:
             # Prepare prompt for Q&A generation
             prompt = f"""
-            Based on the following study material, generate 5 meaningful questions and answers 
+            Based on the following study material, generate 15 meaningful questions and answers 
             that test understanding of key concepts. The questions should be educational and 
             the answers should be comprehensive.
 
             STUDY MATERIAL:
-            {study_text[:5000]}
+            {study_text[:40000]}
 
-            {f"CONTEXT/PAST QUESTIONS: {context_text[:1500]}" if context_text else ""}
+            {f"CONTEXT/PAST QUESTIONS: {context_text[:8000]}" if context_text else ""}
 
             Please provide the output in this exact format for each question:
 
@@ -147,7 +158,7 @@ class AIProcessor:
             Q2: [Question text]
             A2: [Comprehensive answer]
 
-            ...and so on for 5 questions.
+            ...and so on for 15 questions.
 
             Make sure questions cover different aspects of the material and answers are detailed.
             """
@@ -226,7 +237,7 @@ class AIProcessor:
         if not qa_pairs:
             qa_pairs = cls._generate_fallback_questions(response_text)
         
-        return qa_pairs[:5]  # Limit to 5 questions
+        return qa_pairs[:15]  # Limit to 15 questions (was 5)
     
     @classmethod
     def _generate_fallback_questions(cls, text):

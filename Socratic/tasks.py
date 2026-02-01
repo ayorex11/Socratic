@@ -176,7 +176,8 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         try:
             result.update_stage('generating_audio', progress=80, message='Creating audio summary...')
             
-            audio_path = TextToSpeech.generate_audio(result.summary, f"audio_{result_id}")
+            # Use smart audio generation that handles long content with chunking
+            audio_path = TextToSpeech.generate_audio_smart(result.summary, f"audio_{result_id}")
             if audio_path:
                 result.audio_summary.name = audio_path
                 result.audio_generated = True

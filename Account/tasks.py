@@ -139,11 +139,11 @@ def send_subscription_warning_email(user, days_remaining):
         user: User object
         days_remaining: Number of days until expiration (7 or 1)
     """
-    subject = f'[Socratic] Your Premium Subscription Expires in {days_remaining} Day{"s" if days_remaining > 1 else ""}'
+    subject = f'[SocraSeek] Your Premium Subscription Expires in {days_remaining} Day{"s" if days_remaining > 1 else ""}'
     
     message = f"""Hi {user.get_full_name() or user.username},
 
-This is a friendly reminder that your Socratic Premium subscription will expire in {days_remaining} day{"s" if days_remaining > 1 else ""}.
+This is a friendly reminder that your SocraSeek Premium subscription will expire in {days_remaining} day{"s" if days_remaining > 1 else ""}.
 
 Expiration Date: {user.subscription_end_date.strftime('%B %d, %Y')}
 
@@ -160,7 +160,7 @@ Premium Features You'll Lose:
 If you have any questions, feel free to reach out to our support team.
 
 Best regards,
-The Socratic Team
+The SocraSeek Team
 
 ---
 This is an automated message. Please do not reply to this email.
@@ -182,11 +182,11 @@ def send_subscription_expired_email(user):
     Args:
         user: User object
     """
-    subject = '[Socratic] Your Premium Subscription Has Expired'
+    subject = '[SocraSeek] Your Premium Subscription Has Expired'
     
     message = f"""Hi {user.get_full_name() or user.username},
 
-Your Socratic Premium subscription has expired as of {timezone.now().date().strftime('%B %d, %Y')}.
+Your SocraSeek Premium subscription has expired as of {timezone.now().date().strftime('%B %d, %Y')}.
 
 You've been moved back to the Free plan, which includes:
 • 3 document generations
@@ -205,7 +205,7 @@ Renew Now: {settings.FRONTEND_URL}/pricing
 We'd love to have you back as a Premium member!
 
 Best regards,
-The Socratic Team
+The SocraSeek Team
 
 ---
 This is an automated message. Please do not reply to this email.

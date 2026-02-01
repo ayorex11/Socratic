@@ -483,7 +483,7 @@ def processing_status_stream(request, pk):
     response['Content-Encoding'] = 'none'
     
     origin = request.headers.get('Origin')
-    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://socratic-frontend-ashy.vercel.app']:
+    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://www.socraseek.com']:
         response['Access-Control-Allow-Origin'] = origin
         response['Access-Control-Allow-Credentials'] = 'true'
     
@@ -616,7 +616,7 @@ def all_processing_status_stream(request):
     response['Content-Encoding'] = 'none'
     
     origin = request.headers.get('Origin')
-    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://socratic-frontend-ashy.vercel.app']:
+    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://www.socraseek.com']:
         response['Access-Control-Allow-Origin'] = origin
         response['Access-Control-Allow-Credentials'] = 'true'
     

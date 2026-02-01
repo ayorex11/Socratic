@@ -2,7 +2,7 @@ from .gemini_config import GeminiConfig
 
 class PremiumAIProcessor:
     """
-    Enhanced AI processor using Google Gemini
+    Enhanced AI processor using Google Gemini with full context window support
     """
     
     _model = None
@@ -27,13 +27,13 @@ class PremiumAIProcessor:
     @classmethod
     def generate_enhanced_content(cls, study_text, past_questions_text=""):
         """
-        Generate coherent summary and Q&A using Gemini
+        Generate coherent summary and Q&A using Gemini with full content support
         """
         if not cls._models_loaded:
             cls.load_models()
         
         try:
-            # Pre-process the text to ensure quality
+            # Pre-process the text to ensure quality (NO TRUNCATION)
             processed_text = cls._preprocess_study_text(study_text)
             
             if not processed_text or len(processed_text) < 100:
@@ -53,7 +53,10 @@ class PremiumAIProcessor:
     
     @classmethod
     def _preprocess_study_text(cls, text):
-        """Ensure the text is suitable for processing"""
+        """
+        Ensure the text is suitable for processing
+        REMOVED ARTIFICIAL LIMITS - Now processes full content
+        """
         if not text:
             return ""
         
@@ -66,41 +69,55 @@ class PremiumAIProcessor:
             if len(para) >= 100 and len(para.split()) >= 15:
                 good_paragraphs.append(para)
         
-
-        selected_paragraphs = good_paragraphs[:15]
+        # REMOVED LIMIT: Use ALL good paragraphs (was limited to 15)
+        # Gemini 2.5 Flash supports up to 1M tokens (~750k words)
+        # A 100-page PDF is ~50k words, well within limits
+        selected_paragraphs = good_paragraphs  # NO LIMIT
         
         if not selected_paragraphs:
-            return text[:8000]  # Increased limit for Gemini
+            # Fallback: use full text up to 500k characters (safe for Gemini)
+            return text[:500000]
         
         return '\n\n'.join(selected_paragraphs)
     
     @classmethod
     def _generate_coherent_summary(cls, study_text, context_text):
-        """Generate a coherent, well-structured summary using Gemini"""
+        """
+        Generate a coherent, well-structured summary using Gemini
+        INCREASED LIMITS: Now sends up to 200k characters to Gemini
+        """
         try:
             # Prepare prompt for summarization
             if context_text:
                 prompt = f"""
                 Please provide a comprehensive and well-structured summary of the following study material, 
                 considering the context provided. Focus on key concepts, main ideas, and important details.
+                
+                For large documents, organize the summary with clear sections and headings.
+                Include all major topics, concepts, and important information.
 
                 STUDY MATERIAL:
-                {study_text[:15000]}
+                {study_text[:200000]}
 
                 CONTEXT/PAST QUESTIONS:
-                {context_text[:6000]}
+                {context_text[:50000]}
 
-                Please provide a clear, concise summary that highlights the most important information.
+                Please provide a clear, comprehensive summary that highlights all important information.
+                Use markdown formatting with headings, bullet points, and sections as appropriate.
                 """
             else:
                 prompt = f"""
                 Please provide a comprehensive and well-structured summary of the following study material.
                 Focus on key concepts, main ideas, and important details.
+                
+                For large documents, organize the summary with clear sections and headings.
+                Include all major topics, concepts, and important information.
 
                 STUDY MATERIAL:
-                {study_text[:15000]}
+                {study_text[:200000]}
 
-                Please provide a clear, concise summary that highlights the most important information.
+                Please provide a clear, comprehensive summary that highlights all important information.
+                Use markdown formatting with headings, bullet points, and sections as appropriate.
                 """
             
             # Generate summary using Gemini
@@ -112,7 +129,7 @@ class PremiumAIProcessor:
                 if len(summary.split()) < 30:
                     # Fallback: create a basic summary from text
                     sentences = study_text.split('.')
-                    key_sentences = [s.strip() for s in sentences[:4] if len(s.strip()) > 25]
+                    key_sentences = [s.strip() for s in sentences[:10] if len(s.strip()) > 25]
                     summary = '. '.join(key_sentences) + '.'
                 
                 return summary
@@ -124,18 +141,24 @@ class PremiumAIProcessor:
     
     @classmethod
     def _generate_meaningful_questions(cls, study_text, context_text):
-        """Generate meaningful, coherent Q&A pairs using Gemini"""
+        """
+        Generate meaningful, coherent Q&A pairs using Gemini
+        INCREASED LIMITS: Now processes up to 200k characters
+        """
         try:
             # Prepare prompt for Q&A generation
             prompt = f"""
             Based on the following study material, generate 30-40 meaningful questions and answers 
             that test understanding of key concepts. The questions should be educational and 
             the answers should be comprehensive.
+            
+            Cover all major topics and sections in the material.
+            Create questions of varying difficulty levels.
 
             STUDY MATERIAL:
-            {study_text[:15000]}
+            {study_text[:200000]}
 
-            {f"CONTEXT/PAST QUESTIONS: {context_text[:6000]}" if context_text else ""}
+            {f"CONTEXT/PAST QUESTIONS: {context_text[:50000]}" if context_text else ""}
 
             Please provide the output in this exact format for each question:
 
@@ -145,7 +168,7 @@ class PremiumAIProcessor:
             Q2: [Question text]
             A2: [Comprehensive answer]
 
-            ...and so on for 30-45 questions.
+            ...and so on for 30-40 questions.
 
             Make sure questions cover different aspects of the material and answers are detailed.
             """
