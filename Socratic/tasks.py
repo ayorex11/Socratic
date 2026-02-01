@@ -11,17 +11,55 @@ from .utils.free_ai_processor import AIProcessor
 from .utils.text_to_speech import TextToSpeech
 from .utils.pdf_generator import AdvancedPDFGenerator
 from .utils.quiz_generator import AdvancedQuizGenerator, AIPoweredQuizGenerator
-from .utils.file_helpers import _save_temp_file, _cleanup_temp_file
+from .utils.file_helpers import _cleanup_uploaded_file
+from django.core.files.storage import default_storage
+import tempfile
 import time
 
 User = get_user_model()
 
+def _download_from_storage(storage_path):
+    """
+    Download file from R2 storage to a temporary local file.
+    Returns the temp file path.
+    """
+    if not storage_path or not default_storage.exists(storage_path):
+        raise Exception(f"File not found in storage: {storage_path}")
+    
+    # Get file extension
+    file_extension = os.path.splitext(storage_path)[1]
+    
+    # Create temp file
+    fd, temp_path = tempfile.mkstemp(suffix=file_extension)
+    
+    try:
+        os.close(fd)
+        
+        # Download from R2 to temp file
+        with default_storage.open(storage_path, 'rb') as source_file:
+            with open(temp_path, 'wb') as dest_file:
+                dest_file.write(source_file.read())
+        
+        print(f"Downloaded from R2: {storage_path} -> {temp_path}")
+        return temp_path
+        
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+        raise Exception(f"Failed to download from storage: {str(e)}")
+
 @shared_task(bind=True)
-def process_document_task(self, result_id, user_id, study_temp_path, past_questions_temp_path, 
+def process_document_task(self, result_id, user_id, study_storage_path, past_questions_storage_path, 
                           study_material_name, document_title):
+    """
+    Process document from R2 storage.
+    study_storage_path and past_questions_storage_path are R2 storage paths.
+    """
     start_time = time.time()
     audio_path = None 
-    result = None 
+    result = None
+    study_temp_path = None
+    past_questions_temp_path = None 
 
     try:
         user = User.objects.get(id=user_id)
@@ -37,15 +75,17 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             message=f'Task {self.request.id} started processing for result ID {result_id}'
         )
 
-        # STAGE 2: Extract study material text
+        # STAGE 2: Download and extract study material text
         try:
             study_file_type = DocumentProcessor.get_file_type(study_material_name)
             print(f"Processing study material: {study_material_name}, type: {study_file_type}")
             
-            result.update_stage('extracting_text', progress=20, message=f'Extracting from {study_file_type} file...')
+            result.update_stage('extracting_text', progress=15, message='Downloading study material from storage...')
             
-            if not os.path.exists(study_temp_path):
-                raise Exception(f"Study material temp file not found: {study_temp_path}")
+            # Download from R2 storage to temp file
+            study_temp_path = _download_from_storage(study_storage_path)
+            
+            result.update_stage('extracting_text', progress=20, message=f'Extracting from {study_file_type} file...')
             
             file_size = os.path.getsize(study_temp_path)
             print(f"Study material file size: {file_size} bytes")
@@ -76,10 +116,15 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
             )
             raise
         
-        # STAGE 3: Extract past questions (optional)
+        # STAGE 3: Download and extract past questions (optional)
         past_questions_text = ""
-        if past_questions_temp_path and os.path.exists(past_questions_temp_path):
+        if past_questions_storage_path:
             try:
+                result.update_stage('extracting_text', progress=40, message='Downloading past questions...')
+                
+                # Download from R2 storage
+                past_questions_temp_path = _download_from_storage(past_questions_storage_path)
+                
                 result.update_stage('extracting_text', progress=45, message='Processing past questions...')
                 
                 past_questions_file_type = DocumentProcessor.get_file_type(past_questions_temp_path)
@@ -261,11 +306,23 @@ def process_document_task(self, result_id, user_id, study_temp_path, past_questi
         raise self.retry(exc=e, countdown=60, max_retries=3)
         
     finally:
-        # Cleanup temp files
+        # Cleanup temp files (downloaded from R2)
         try:
-            _cleanup_temp_file(study_temp_path)
-            if past_questions_temp_path:
-                _cleanup_temp_file(past_questions_temp_path)
-            print("Temp files cleaned up successfully")
+            if study_temp_path and os.path.exists(study_temp_path):
+                os.unlink(study_temp_path)
+                print(f"Cleaned up temp file: {study_temp_path}")
+            if past_questions_temp_path and os.path.exists(past_questions_temp_path):
+                os.unlink(past_questions_temp_path)
+                print(f"Cleaned up temp file: {past_questions_temp_path}")
         except Exception as cleanup_error:
-            print(f"Cleanup error: {cleanup_error}")
+            print(f"Temp file cleanup error: {cleanup_error}")
+        
+        # Cleanup R2 uploaded files (original uploads)
+        try:
+            if study_storage_path:
+                _cleanup_uploaded_file(study_storage_path)
+            if past_questions_storage_path:
+                _cleanup_uploaded_file(past_questions_storage_path)
+            print("R2 uploaded files cleaned up successfully")
+        except Exception as cleanup_error:
+            print(f"R2 cleanup error: {cleanup_error}")

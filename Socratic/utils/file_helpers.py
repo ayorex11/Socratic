@@ -1,46 +1,48 @@
 import tempfile
 import os
+from django.core.files.storage import default_storage
+import uuid
 
-def _save_temp_file(uploaded_file):
-    """Save uploaded file to temporary location"""
-    print(f"Saving temporary file for: {uploaded_file.name}")
-    
-    # Use system temp directory (cross-platform: Windows, Linux, Mac)
-    temp_dir = tempfile.gettempdir()
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    fd, temp_path = tempfile.mkstemp(
-        suffix=os.path.splitext(uploaded_file.name)[1],
-        dir=temp_dir
-    )
+def _save_uploaded_file_to_storage(uploaded_file):
+    """
+    Save uploaded file to R2 storage instead of temp directory.
+    This ensures Celery workers in separate containers can access the file.
+    Returns the file path in R2 storage.
+    """
+    print(f"Saving uploaded file to R2: {uploaded_file.name}")
     
     try:
-        # Close the file descriptor immediately and use normal file operations
-        os.close(fd)
+        # Generate unique filename
+        file_extension = os.path.splitext(uploaded_file.name)[1]
+        unique_filename = f"uploads/{uuid.uuid4().hex}{file_extension}"
         
-        # Write the uploaded file content
-        with open(temp_path, 'wb') as temp_file:
-            for chunk in uploaded_file.chunks():
-                temp_file.write(chunk)
+        # Save to R2 storage
+        file_path = default_storage.save(unique_filename, uploaded_file)
         
-        # Verify file was written
-        file_size = os.path.getsize(temp_path)
-        print(f"Temp file saved: {temp_path} ({file_size} bytes)")
+        # Verify file was saved
+        if not default_storage.exists(file_path):
+            raise Exception("File was not saved to storage")
+        
+        file_size = default_storage.size(file_path)
+        print(f"File saved to R2: {file_path} ({file_size} bytes)")
         
         if file_size == 0:
-            raise Exception("Temp file is empty")
+            default_storage.delete(file_path)
+            raise Exception("Uploaded file is empty")
         
-        return temp_path
-            
+        return file_path
+        
     except Exception as e:
-        # Clean up on error
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
-        raise Exception(f"Failed to save temp file: {str(e)}")
-    
-def _cleanup_temp_file(file_path):
+        print(f"Failed to save file to R2: {str(e)}")
+        raise Exception(f"Failed to save uploaded file: {str(e)}")
+
+def _cleanup_uploaded_file(file_path):
+    """
+    Delete uploaded file from R2 storage after processing.
+    """
     try:
-        if file_path and os.path.exists(file_path):
-            os.unlink(file_path)
+        if file_path and default_storage.exists(file_path):
+            default_storage.delete(file_path)
+            print(f"Cleaned up uploaded file: {file_path}")
     except Exception as e:
-        print(f"Error cleaning up temp file {file_path}: {e}")
+        print(f"Error cleaning up uploaded file {file_path}: {e}")

@@ -27,7 +27,7 @@ from logs.models import LogEntry
 from datetime import datetime
 from .tasks import process_document_task
 from django.utils import timezone
-from .utils.file_helpers import _save_temp_file, _cleanup_temp_file
+from .utils.file_helpers import _save_uploaded_file_to_storage, _cleanup_uploaded_file
 from Account.models import User as CustomUser
 from Quiz.models import Quiz
 @swagger_auto_schema(methods=['POST'], request_body=DocumentProcessingSerializer)
@@ -88,8 +88,8 @@ def create_processing(request):
         process_document_task.delay(
             result.id, 
             user.id, 
-            study_temp_path, 
-            past_questions_temp_path, 
+            study_file_path,  # R2 storage path
+            past_questions_file_path,  # R2 storage path or None
             study_material.name,
             document_title
         )
@@ -110,9 +110,9 @@ def create_processing(request):
         
     except Exception as e:
         # --- 8. Handle synchronous failure (e.g., file system error, DB error on creation) ---
-        _cleanup_temp_file(study_temp_path)
-        if past_questions_temp_path:
-            _cleanup_temp_file(past_questions_temp_path)
+        _cleanup_uploaded_file(study_file_path)
+        if past_questions_file_path:
+            _cleanup_uploaded_file(past_questions_file_path)
 
         LogEntry.objects.create(
             user=user, timestamp=timezone.now(), level='Error', status_code='500',
