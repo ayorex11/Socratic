@@ -41,8 +41,8 @@ def create_processing(request):
     dispatches the long-running task to Celery, and returns 202 ACCEPTED immediately.
     """
     user = request.user
-    study_temp_path = None
-    past_questions_temp_path = None
+    study_file_path = None
+    past_questions_file_path = None
 
     # --- 1. Generation Limit Check ---
     if not user.is_premium_active and user.number_of_generations >= 3:
@@ -71,9 +71,9 @@ def create_processing(request):
         past_questions = data.get('past_questions')
         document_title = data['document_title']
         
-        # --- 3. Save files synchronously and get paths ---
-        study_temp_path = _save_temp_file(study_material)
-        past_questions_temp_path = _save_temp_file(past_questions) if past_questions else None
+        # --- 3. Save files to R2 storage (accessible to all containers) ---
+        study_file_path = _save_uploaded_file_to_storage(study_material)
+        past_questions_file_path = _save_uploaded_file_to_storage(past_questions) if past_questions else None
         
         # --- 4. Create INITIAL PENDING database record ---
         result = ProcessingResult.objects.create(
