@@ -14,8 +14,13 @@ class Transaction(models.Model):
     date_created = models.DateTimeField(auto_now_add=True)
     date_completed = models.DateTimeField(blank=False, null=True)
     completed = models.BooleanField(default=False)
-    reference = models.CharField(max_length=50, blank=False, null=False)
+    reference = models.CharField(
+        max_length=50, 
+        blank=False, 
+        null=False,
+        unique=True,  # Prevents replay attacks - each reference can only exist once
+        db_index=True  # Improves query performance for webhook lookups
+    )
 
     def __str__(self):
         return self.user.username + " - " + str(self.amount_paid) + " - " + self.type_of_transaction + " - " + str(self.completed)
-

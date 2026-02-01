@@ -37,11 +37,18 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    USER_TYPE_CHOICES = [
+        ('free', 'Free'),
+        ('premium', 'Premium'),
+        ('student', 'Student'),
+    ]
+    
     first_name = models.CharField(max_length=250, blank=True)
     last_name = models.CharField(max_length=250, blank=True)
     email = models.EmailField('email address', unique=True)
     username = models.CharField(max_length=50, unique=True)
-    premium_user = models.BooleanField(default=False)
+    premium_user = models.BooleanField(default=False)  # Kept for backward compatibility
+    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='free')
     subscription_end_date = models.DateField(blank=True, null=True)
     number_of_generations = models.IntegerField(default=0)
     date_joined = models.DateTimeField(auto_now_add=True)
@@ -72,15 +79,32 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     @property
     def is_premium_active(self):
-        """Check if user has active premium subscription"""
-        if not self.premium_user:
+        """Check if user has active premium or student subscription"""
+        # Check if user has premium or student tier
+        if self.user_type not in ['premium', 'student']:
             return False
         
         if self.subscription_end_date:
             if self.subscription_end_date < timezone.now().date():
+                # Subscription expired - downgrade to free
                 self.premium_user = False
+                self.user_type = 'free'
                 self.subscription_end_date = None
-                self.save(update_fields=['premium_user', 'subscription_end_date'])
+                self.save(update_fields=['premium_user', 'user_type', 'subscription_end_date'])
                 return False
         
         return True
+    
+    def is_student_email(self):
+        """Check if user's email is from a student/educational institution"""
+        if not self.email:
+            return False
+        
+        email_lower = self.email.lower()
+        domain = email_lower.split('@')[-1] if '@' in email_lower else ''
+        
+        # Keywords that indicate educational institutions
+        student_keywords = ['university', 'college', 'school', 'edu', 'ac', 'student']
+        
+        # Check if domain contains any student keywords
+        return any(keyword in domain for keyword in student_keywords)

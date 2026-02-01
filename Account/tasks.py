@@ -13,9 +13,9 @@ def check_expired_subscriptions():
     Runs at midnight UTC to ensure timely expiration.
     """
     try:
-        # Find all users with expired subscriptions
+        # Find all users with expired subscriptions (both premium and student)
         expired_users = User.objects.filter(
-            premium_user=True,
+            user_type__in=['premium', 'student'],
             subscription_end_date__lt=timezone.now().date()
         )
         
@@ -33,10 +33,11 @@ def check_expired_subscriptions():
                     message=f'Failed to send expiration email: {str(email_error)}'
                 )
             
-            # Update user status
+            # Update user status - downgrade to free
             user.premium_user = False
+            user.user_type = 'free'
             user.subscription_end_date = None
-            user.save(update_fields=['premium_user', 'subscription_end_date'])
+            user.save(update_fields=['premium_user', 'user_type', 'subscription_end_date'])
             expired_count += 1
         
         # Log the task completion
@@ -68,10 +69,10 @@ def send_expiration_warnings():
     try:
         today = timezone.now().date()
         
-        # 7-day warning
+        # 7-day warning (both premium and student)
         seven_days_from_now = today + timezone.timedelta(days=7)
         users_7day = User.objects.filter(
-            premium_user=True,
+            user_type__in=['premium', 'student'],
             subscription_end_date=seven_days_from_now
         )
         
@@ -89,10 +90,10 @@ def send_expiration_warnings():
                     message=f'Failed to send 7-day warning email: {str(email_error)}'
                 )
         
-        # 1-day warning
+        # 1-day warning (both premium and student)
         tomorrow = today + timezone.timedelta(days=1)
         users_1day = User.objects.filter(
-            premium_user=True,
+            user_type__in=['premium', 'student'],
             subscription_end_date=tomorrow
         )
         

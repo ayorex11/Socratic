@@ -138,3 +138,35 @@ def google_auth(request):
             {'error': f'Authentication failed: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_student_eligibility(request):
+    from .utils import is_student_email, get_email_domain
+    
+    email = request.user.email
+    
+    if not email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    eligible = is_student_email(email)
+    domain = get_email_domain(email)
+    
+    if eligible:
+        return Response({
+            'eligible': True,
+            'email': email,
+            'domain': domain,
+            'message': 'Email is eligible for student plan'
+        }, status=status.HTTP_200_OK)
+    else:
+        return Response({
+            'eligible': False,
+            'email': email,
+            'domain': domain,
+            'message': 'Email is not eligible for student plan. Please use a university, college, or school email address.'
+        }, status=status.HTTP_200_OK)
