@@ -21,7 +21,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = False
 
 
-ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socraseek.com','127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socraseek.com', 'socratic-production-e023.up.railway.app', 'https://socratic-production-e023.up.railway.app/', '127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
