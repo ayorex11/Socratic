@@ -4,7 +4,7 @@
 {% block content %}
 {% autoescape off %}
 {% user_display user as user_display %}
-{% blocktrans with site_name="Socrates" site_domain="Socrates.com" %}
+{% blocktrans with site_name="SocraSeek" site_domain="socraseek.com" %}
 Dear {{ user_display }},
 Thank you for signing up with {{site_name}}!.
 

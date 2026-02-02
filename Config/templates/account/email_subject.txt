@@ -1,4 +1,4 @@
 {% load i18n %}
 {% autoescape off %}
-{% blocktrans %}Welcome to Socrates! Confirm Your Email Address{% endblocktrans %}
+{% blocktrans %}Welcome to SocraSeek! Confirm Your Email Address{% endblocktrans %}
 {% endautoescape %}
