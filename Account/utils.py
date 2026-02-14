@@ -26,3 +26,25 @@ def record_user_fingerprint(user, request):
                 'user_agent': request.META.get('HTTP_USER_AGENT')
             }
         )
+
+def get_email_domain(email):
+    """
+    Extracts the domain from an email address.
+    """
+    if not email or '@' not in email:
+        return ''
+    return email.lower().split('@')[-1]
+
+def is_student_email(email):
+    """
+    Checks if an email belongs to a student/educational institution.
+    """
+    domain = get_email_domain(email)
+    if not domain:
+        return False
+        
+    # Keywords that indicate educational institutions
+    student_keywords = ['university', 'college', 'school', 'edu', 'ac', 'student']
+    
+    # Check if domain contains any student keywords
+    return any(keyword in domain for keyword in student_keywords)
