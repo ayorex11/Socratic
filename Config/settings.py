@@ -262,6 +262,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'cache-control',
     'connection',
+    'x-device-fingerprint',
 ]
 
 # Security
