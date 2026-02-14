@@ -509,11 +509,6 @@ async def processing_status_stream(request, pk):
     response['X-Accel-Buffering'] = 'no'
     response['Content-Encoding'] = 'none'
     
-    origin = request.headers.get('Origin')
-    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://www.socraseek.com']:
-        response['Access-Control-Allow-Origin'] = origin
-        response['Access-Control-Allow-Credentials'] = 'true'
-    
     return response
 
 
@@ -659,11 +654,6 @@ async def all_processing_status_stream(request):
     response['Cache-Control'] = 'no-cache, no-transform'
     response['X-Accel-Buffering'] = 'no'
     response['Content-Encoding'] = 'none'
-    
-    origin = request.headers.get('Origin')
-    if origin in ['http://localhost:5173', 'http://localhost:3000', 'https://www.socraseek.com']:
-        response['Access-Control-Allow-Origin'] = origin
-        response['Access-Control-Allow-Credentials'] = 'true'
     
     return response
 
