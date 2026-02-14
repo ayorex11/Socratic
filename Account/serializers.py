@@ -47,10 +47,8 @@ class RegisterSerializer(serializers.Serializer):
         if request:
             fingerprint = request.headers.get('x-device-fingerprint')
             if fingerprint:
-                from .models import UserFingerprint
-                # Check how many users already have this fingerprint
-                existing_count = UserFingerprint.objects.filter(device_fingerprint=fingerprint).values('user').distinct().count()
-                if existing_count >= 2: # Limit: Max 2 accounts per device
+                from .utils import check_fingerprint_limit
+                if not check_fingerprint_limit(fingerprint):
                     raise serializers.ValidationError(
                         {"non_field_errors": ["Maximum account limit reached for this device."]}
                     )
@@ -85,15 +83,8 @@ class RegisterSerializer(serializers.Serializer):
             user.save()
             
             # --- Save Fingerprint ---
-            fingerprint = request.headers.get('x-device-fingerprint')
-            if fingerprint:
-                from .models import UserFingerprint
-                UserFingerprint.objects.create(
-                    user=user,
-                    device_fingerprint=fingerprint,
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT')
-                )
+            from .utils import record_user_fingerprint
+            record_user_fingerprint(user, request)
                 
         except IntegrityError as e:
             raise serializers.ValidationError({"error": "A user with that username or email already exists."})
