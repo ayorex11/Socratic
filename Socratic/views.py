@@ -128,7 +128,7 @@ def create_processing(request):
 def list_processing_results(request):
     """Get all processing results"""
     user = request.user
-    results = ProcessingResult.objects.filter(user=user)
+    results = ProcessingResult.objects.filter(user=user, is_deleted=False)
     serializer = MinimalProcessingResultSerializer(results, many=True)
     LogEntry.objects.create(
         timestamp = datetime.now(),
@@ -333,9 +333,11 @@ def delete_processing_result(request, pk):
     user = request.user
     try:
         result = ProcessingResult.objects.get(id=pk, user=user)
-        result.delete()
-        user.number_of_generations = max(0, user.number_of_generations - 1)
-        user.save()
+        result.is_deleted = True
+        result.deleted_at = datetime.now()
+        result.save()
+        # user.number_of_generations = max(0, user.number_of_generations - 1)  <-- REMOVED: Count is now lifetime
+        # user.save()
         LogEntry.objects.create(
             timestamp = datetime.now(),
             level = 'Normal',
@@ -361,13 +363,25 @@ def delete_processing_result(request, pk):
 from django.views.decorators.http import require_http_methods
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+import asyncio
+from asgiref.sync import sync_to_async
+
 @require_http_methods(["GET"])
-def processing_status_stream(request, pk):
+async def processing_status_stream(request, pk):
     """SSE endpoint for single document"""
-    # Manual JWT authentication
+    # Manual JWT authentication - Wrap sync auth in sync_to_async
     try:
-        auth = JWTAuthentication()
-        user_auth = auth.authenticate(request)
+        @sync_to_async
+        def authenticate_user():
+            auth = JWTAuthentication()
+            try:
+                user_auth = auth.authenticate(request)
+            except Exception:
+                return None
+            return user_auth
+            
+        user_auth = await authenticate_user()
+        
         if user_auth is None:
             return HttpResponse(
                 json.dumps({'error': 'Authentication required'}),
@@ -382,10 +396,13 @@ def processing_status_stream(request, pk):
             content_type='application/json'
         )
     
-    def event_stream():
+    async def event_stream():
         try:
+            # Sync wrapper for initial DB fetch
+            get_result = sync_to_async(ProcessingResult.objects.get)
+            
             try:
-                result = ProcessingResult.objects.get(pk=pk, user=user)
+                result = await get_result(pk=pk, user=user)
             except ProcessingResult.DoesNotExist:
                 yield f"event: error\ndata: {json.dumps({'error': 'Document not found'})}\n\n"
                 return
@@ -394,34 +411,58 @@ def processing_status_stream(request, pk):
             last_stage = None
             last_progress = None
             retry_count = 0
-            max_retries = 180
+            max_retries = 300 # 5 minutes timeout
             
-            initial_data = {
-                'id': str(result.id),
-                'status': result.status,
-                'processing_stage': result.processing_stage,
-                'stage_progress': result.stage_progress,
-                'stage_message': result.stage_message,
-                'stage_label': result.get_processing_stage_display(),
-                'quiz_generated': result.quiz_generated,
-                'pdf_generated': result.pdf_generated,
-                'audio_generated': result.audio_generated,
-                'is_processing': result.status == 'PROCESSING',
-                'timestamp': timezone.now().isoformat()
-            }
+            # Helper to get data safely
+            @sync_to_async
+            def get_initial_data(res):
+                return {
+                    'id': str(res.id),
+                    'status': res.status,
+                    'processing_stage': res.processing_stage,
+                    'stage_progress': res.stage_progress,
+                    'stage_message': res.stage_message,
+                    'stage_label': res.get_processing_stage_display(),
+                    'quiz_generated': res.quiz_generated,
+                    'pdf_generated': res.pdf_generated,
+                    'audio_generated': res.audio_generated,
+                    'is_processing': res.status == 'PROCESSING',
+                    'timestamp': timezone.now().isoformat()
+                }
+
+            initial_data = await get_initial_data(result)
             yield f"data: {json.dumps(initial_data)}\n\n"
+            yield "retry: 3000\n\n" # Tell client to reconnect in 3s if connection drops
             
-            last_status = result.status
-            last_stage = result.processing_stage
-            last_progress = result.stage_progress
+            last_status = initial_data['status']
+            last_stage = initial_data['processing_stage']
+            last_progress = initial_data['stage_progress']
             
+            # Helper to refresh and get data
+            @sync_to_async
+            def check_updates(res_id, u):
+                r = ProcessingResult.objects.get(pk=res_id, user=u)
+                return {
+                    'id': str(r.id),
+                    'status': r.status,
+                    'processing_stage': r.processing_stage,
+                    'stage_progress': r.stage_progress,
+                    'stage_message': r.stage_message,
+                    'stage_label': r.get_processing_stage_display(),
+                    'quiz_generated': r.quiz_generated,
+                    'pdf_generated': r.pdf_generated,
+                    'audio_generated': r.audio_generated,
+                    'is_processing': r.status == 'PROCESSING',
+                    'timestamp': timezone.now().isoformat()
+                }
+
             while retry_count < max_retries:
                 try:
-                    result.refresh_from_db()
+                    current_data = await check_updates(pk, user)
                     
-                    current_status = result.status
-                    current_stage = result.processing_stage
-                    current_progress = result.stage_progress
+                    current_status = current_data['status']
+                    current_stage = current_data['processing_stage']
+                    current_progress = current_data['stage_progress']
                     
                     status_changed = (
                         last_status != current_status or
@@ -430,21 +471,7 @@ def processing_status_stream(request, pk):
                     )
                     
                     if status_changed:
-                        data = {
-                            'id': str(result.id),
-                            'status': result.status,
-                            'processing_stage': result.processing_stage,
-                            'stage_progress': result.stage_progress,
-                            'stage_message': result.stage_message,
-                            'stage_label': result.get_processing_stage_display(),
-                            'quiz_generated': result.quiz_generated,
-                            'pdf_generated': result.pdf_generated,
-                            'audio_generated': result.audio_generated,
-                            'is_processing': result.status == 'PROCESSING',
-                            'timestamp': timezone.now().isoformat()
-                        }
-                        
-                        yield f"data: {json.dumps(data)}\n\n"
+                        yield f"data: {json.dumps(current_data)}\n\n"
                         
                         last_status = current_status
                         last_stage = current_stage
@@ -452,20 +479,21 @@ def processing_status_stream(request, pk):
                         
                         retry_count = 0
                         
-                        if result.status in ['COMPLETED', 'FAILED']:
-                            yield f"event: close\ndata: {json.dumps({'message': 'Processing finished', 'status': result.status})}\n\n"
+                        if current_status in ['COMPLETED', 'FAILED']:
+                            yield f"event: close\ndata: {json.dumps({'message': 'Processing finished', 'status': current_status})}\n\n"
                             return
                     else:
-                        if retry_count % 15 == 0:
+                        # Send keepalive every 10 seconds (approx 10 loops)
+                        if retry_count % 10 == 0:
                             yield f": keepalive\n\n"
                     
-                    time.sleep(1)
+                    await asyncio.sleep(1)
                     retry_count += 1
                     
                 except Exception as db_error:
                     yield f"event: error\ndata: {json.dumps({'error': f'Database error: {str(db_error)}'})}\n\n"
-                    return
-            
+                    await asyncio.sleep(2) # Backoff briefly on error
+                    
             yield f"event: timeout\ndata: {json.dumps({'message': 'Connection timeout - please refresh'})}\n\n"
                 
         except Exception as e:
@@ -479,7 +507,6 @@ def processing_status_stream(request, pk):
     
     response['Cache-Control'] = 'no-cache, no-transform'
     response['X-Accel-Buffering'] = 'no'
-    response['Connection'] = 'keep-alive'
     response['Content-Encoding'] = 'none'
     
     origin = request.headers.get('Origin')
@@ -491,12 +518,21 @@ def processing_status_stream(request, pk):
 
 
 @require_http_methods(["GET"])
-def all_processing_status_stream(request):
+async def all_processing_status_stream(request):
     """SSE endpoint for all documents"""
     # Manual JWT authentication
     try:
-        auth = JWTAuthentication()
-        user_auth = auth.authenticate(request)
+        @sync_to_async
+        def authenticate_user():
+            auth = JWTAuthentication()
+            try:
+                user_auth = auth.authenticate(request)
+            except Exception:
+                return None
+            return user_auth
+            
+        user_auth = await authenticate_user()
+        
         if user_auth is None:
             return HttpResponse(
                 json.dumps({'error': 'Authentication required'}),
@@ -511,33 +547,37 @@ def all_processing_status_stream(request):
             content_type='application/json'
         )
     
-    def event_stream():
+    async def event_stream():
         try:
             last_states = {}
             retry_count = 0
             max_retries = 180
             
-            results = ProcessingResult.objects.filter(user=user)
-            initial_updates = []
-            
-            for result in results:
-                result_id = str(result.id)
-                state = (result.status, result.processing_stage, result.stage_progress)
-                last_states[result_id] = state
-                
-                initial_updates.append({
-                    'id': result_id,
-                    'status': result.status,
-                    'processing_stage': result.processing_stage,
-                    'stage_progress': result.stage_progress,
-                    'stage_message': result.stage_message,
-                    'stage_label': result.get_processing_stage_display(),
-                    'quiz_generated': result.quiz_generated,
-                    'pdf_generated': result.pdf_generated,
-                    'audio_generated': result.audio_generated,
-                    'document_title': result.document_title,
-                    'created_at': result.created_at.isoformat(),
-                })
+            # Helper to fetch initial state
+            @sync_to_async
+            def get_all_results_data(u):
+                res_queryset = ProcessingResult.objects.filter(user=u)
+                data_list = []
+                states = {}
+                for res in res_queryset:
+                    res_id = str(res.id)
+                    states[res_id] = (res.status, res.processing_stage, res.stage_progress)
+                    data_list.append({
+                        'id': res_id,
+                        'status': res.status,
+                        'processing_stage': res.processing_stage,
+                        'stage_progress': res.stage_progress,
+                        'stage_message': res.stage_message,
+                        'stage_label': res.get_processing_stage_display(),
+                        'quiz_generated': res.quiz_generated,
+                        'pdf_generated': res.pdf_generated,
+                        'audio_generated': res.audio_generated,
+                        'document_title': res.document_title,
+                        'created_at': res.created_at.isoformat(),
+                    })
+                return data_list, states
+
+            initial_updates, last_states = await get_all_results_data(user)
             
             if initial_updates:
                 initial_data = {
@@ -545,37 +585,43 @@ def all_processing_status_stream(request):
                     'timestamp': timezone.now().isoformat()
                 }
                 yield f"data: {json.dumps(initial_data)}\n\n"
+            yield "retry: 3000\n\n" # Tell client to reconnect in 3s if connection drops
             
+            # Helper to check for changes
+            @sync_to_async
+            def check_all_updates(u, current_last_states):
+                res_queryset = ProcessingResult.objects.filter(user=u)
+                has_active = res_queryset.filter(status__in=['PROCESSING', 'PENDING']).exists()
+                
+                new_updates = []
+                updated_states = current_last_states.copy()
+                
+                for res in res_queryset:
+                    res_id = str(res.id)
+                    current_state = (res.status, res.processing_stage, res.stage_progress)
+                    
+                    if current_last_states.get(res_id) != current_state:
+                        new_updates.append({
+                            'id': res_id,
+                            'status': res.status,
+                            'processing_stage': res.processing_stage,
+                            'stage_progress': res.stage_progress,
+                            'stage_message': res.stage_message,
+                            'stage_label': res.get_processing_stage_display(),
+                            'quiz_generated': res.quiz_generated,
+                            'pdf_generated': res.pdf_generated,
+                            'audio_generated': res.audio_generated,
+                            'document_title': res.document_title,
+                            'created_at': res.created_at.isoformat(),
+                        })
+                        updated_states[res_id] = current_state
+                
+                return new_updates, updated_states, has_active
+
             while retry_count < max_retries:
                 try:
-                    results = ProcessingResult.objects.filter(user=user)
-                    
-                    has_processing = results.filter(status__in=['PROCESSING', 'PENDING']).exists()
-                    
-                    updates = []
-                    for result in results:
-                        result_id = str(result.id)
-                        current_state = (
-                            result.status,
-                            result.processing_stage,
-                            result.stage_progress
-                        )
-                        
-                        if last_states.get(result_id) != current_state:
-                            updates.append({
-                                'id': result_id,
-                                'status': result.status,
-                                'processing_stage': result.processing_stage,
-                                'stage_progress': result.stage_progress,
-                                'stage_message': result.stage_message,
-                                'stage_label': result.get_processing_stage_display(),
-                                'quiz_generated': result.quiz_generated,
-                                'pdf_generated': result.pdf_generated,
-                                'audio_generated': result.audio_generated,
-                                'document_title': result.document_title,
-                                'created_at': result.created_at.isoformat(),
-                            })
-                            last_states[result_id] = current_state
+                    updates, new_states, has_processing = await check_all_updates(user, last_states)
+                    last_states = new_states
                     
                     if updates:
                         data = {
@@ -589,15 +635,15 @@ def all_processing_status_stream(request):
                         yield f"event: complete\ndata: {json.dumps({'message': 'All processing complete'})}\n\n"
                         return
                     
-                    if retry_count % 15 == 0:
+                    if retry_count % 10 == 0:
                         yield f": keepalive\n\n"
                     
-                    time.sleep(1)
+                    await asyncio.sleep(1)
                     retry_count += 1
                     
                 except Exception as db_error:
                     yield f"event: error\ndata: {json.dumps({'error': f'Database error: {str(db_error)}'})}\n\n"
-                    return
+                    await asyncio.sleep(2)
             
             yield f"event: timeout\ndata: {json.dumps({'message': 'Connection timeout'})}\n\n"
                 
@@ -612,7 +658,6 @@ def all_processing_status_stream(request):
     
     response['Cache-Control'] = 'no-cache, no-transform'
     response['X-Accel-Buffering'] = 'no'
-    response['Connection'] = 'keep-alive'
     response['Content-Encoding'] = 'none'
     
     origin = request.headers.get('Origin')

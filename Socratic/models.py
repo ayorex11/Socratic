@@ -34,6 +34,8 @@ class ProcessingResult(models.Model):
     processing_stage = models.CharField(max_length=50, choices=STAGE_CHOICES, default='pending')
     stage_progress = models.IntegerField(default=0)
     stage_message = models.CharField(max_length=255, blank=True, null=True)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         db_table = 'processing_results'

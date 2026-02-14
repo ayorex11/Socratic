@@ -108,3 +108,18 @@ class User(AbstractBaseUser, PermissionsMixin):
         
         # Check if domain contains any student keywords
         return any(keyword in domain for keyword in student_keywords)
+
+
+class UserFingerprint(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fingerprints')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    device_fingerprint = models.CharField(max_length=255, db_index=True)
+    browser_fingerprint = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    user_agent = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_fingerprint[:8]}..."
