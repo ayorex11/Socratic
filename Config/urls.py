@@ -7,6 +7,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from resetpassword.views import PasswordResetRequestView, PasswordResetConfirmAPIView
+from Account.api_views import CustomLoginView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -25,6 +26,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    path('auth/login/', CustomLoginView.as_view(), name='rest_login'),
     path('auth/', include('dj_rest_auth.urls')), 
     path('registration/', include('dj_rest_auth.registration.urls')),  
     path(

@@ -89,23 +89,23 @@ def google_auth(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # --- Fingerprint Check for ALL Users (New or Existing) ---
+        fingerprint = request.headers.get('x-device-fingerprint')
+        if fingerprint:
+            from .utils import check_fingerprint_limit
+            if not check_fingerprint_limit(fingerprint):
+                 return Response(
+                     {'non_field_errors': ['Maximum account limit reached for this device.']},
+                     status=status.HTTP_400_BAD_REQUEST
+                 )
+
         # Check if user exists by email
         try:
             user = User.objects.get(email=email)
             created = False
         except User.DoesNotExist:
-            
-            # --- Fingerprint Check for New Users ---
-            fingerprint = request.headers.get('x-device-fingerprint')
-            if fingerprint:
-                from .utils import check_fingerprint_limit
-                if not check_fingerprint_limit(fingerprint):
-                    return Response(
-                         {'non_field_errors': ['Maximum account limit reached for this device.']},
-                         status=status.HTTP_400_BAD_REQUEST
-                    )
-            
             # Create new user
+
             base_username = email.split('@')[0]
             username = base_username
             
