@@ -89,23 +89,22 @@ def google_auth(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # --- Fingerprint Check for ALL Users (New or Existing) ---
-        fingerprint = request.headers.get('x-device-fingerprint')
-        if fingerprint:
-            from .utils import check_fingerprint_limit
-            if not check_fingerprint_limit(fingerprint):
-                 return Response(
-                     {'non_field_errors': ['Maximum account limit reached for this device.']},
-                     status=status.HTTP_400_BAD_REQUEST
-                 )
-
         # Check if user exists by email
         try:
             user = User.objects.get(email=email)
             created = False
         except User.DoesNotExist:
-            # Create new user
+            # --- Fingerprint limit check for NEW registrations only ---
+            fingerprint = request.headers.get('x-device-fingerprint')
+            if fingerprint:
+                from .utils import check_fingerprint_limit
+                if not check_fingerprint_limit(fingerprint):
+                     return Response(
+                         {'non_field_errors': ['Maximum account limit reached for this device.']},
+                         status=status.HTTP_400_BAD_REQUEST
+                     )
 
+            # Create new user
             base_username = email.split('@')[0]
             username = base_username
             
@@ -128,9 +127,13 @@ def google_auth(request):
         refresh = RefreshToken.for_user(user)
         access_token_obj = refresh.access_token
         
-        # --- Record Fingerprint ---
-        from .utils import record_user_fingerprint
-        record_user_fingerprint(user, request)
+        # --- Record Fingerprint & Send Alert for Existing Users ---
+        fingerprint = request.headers.get('x-device-fingerprint')
+        if fingerprint:
+            from .utils import record_user_fingerprint, is_new_fingerprint_for_user, send_new_device_alert_email
+            if not created and is_new_fingerprint_for_user(user, fingerprint):
+                send_new_device_alert_email(user, request)
+            record_user_fingerprint(user, request)
         
         return Response({
             'access': str(access_token_obj),

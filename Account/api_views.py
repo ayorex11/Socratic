@@ -1,29 +1,51 @@
 from dj_rest_auth.views import LoginView
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from .utils import check_fingerprint_limit, record_user_fingerprint
+from .utils import record_user_fingerprint, is_new_fingerprint_for_user, send_new_device_alert_email
 
 class CustomLoginView(LoginView):
     def post(self, request, *args, **kwargs):
-        # --- Fingerprint Check ---
         fingerprint = request.headers.get('x-device-fingerprint')
         
-        # We enforce strict checking: if no fingerprint, we might want to block or allow.
-        # For now, if provided, we check logic.
-        if fingerprint:
-             if not check_fingerprint_limit(fingerprint):
-                 return Response(
-                     {'non_field_errors': ['Maximum account limit reached for this device.']},
-                     status=status.HTTP_400_BAD_REQUEST
-                 )
-        
-        # Proceed with standard login
+        # Proceed with standard login (no fingerprint blocking)
         response = super().post(request, *args, **kwargs)
         
-        # If login successful, record the fingerprint
+        # If login successful, check if new device and send alert
         if response.status_code == status.HTTP_200_OK and fingerprint:
-            # self.user is set by dj_rest_auth after successful login
             if self.user:
+                if is_new_fingerprint_for_user(self.user, fingerprint):
+                    send_new_device_alert_email(self.user, request)
                 record_user_fingerprint(self.user, request)
                 
         return response
+
+
+class LogoutAllDevicesView(APIView):
+    """
+    Blacklists all outstanding refresh tokens for the authenticated user,
+    effectively logging them out of every device.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+
+            tokens = OutstandingToken.objects.filter(user=request.user)
+            blacklisted_count = 0
+            for token in tokens:
+                _, created = BlacklistedToken.objects.get_or_create(token=token)
+                if created:
+                    blacklisted_count += 1
+
+            return Response(
+                {'message': f'Successfully logged out of all devices. {blacklisted_count} session(s) terminated.'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to logout all devices: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
