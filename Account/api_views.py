@@ -40,10 +40,13 @@ class LogoutAllDevicesView(APIView):
                 if created:
                     blacklisted_count += 1
 
-            return Response(
+            response = Response(
                 {'message': f'Successfully logged out of all devices. {blacklisted_count} session(s) terminated.'},
                 status=status.HTTP_200_OK
             )
+            response.delete_cookie('my-app-auth', path='/', samesite='None')
+            response.delete_cookie('my-refresh-token', path='/', samesite='None')
+            return response
         except Exception as e:
             return Response(
                 {'error': f'Failed to logout all devices: {str(e)}'},

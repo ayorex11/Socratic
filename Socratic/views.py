@@ -373,6 +373,16 @@ async def processing_status_stream(request, pk):
     try:
         @sync_to_async
         def authenticate_user():
+            # Try cookie-based auth first (HttpOnly cookies)
+            from dj_rest_auth.jwt_auth import JWTCookieAuthentication
+            cookie_auth = JWTCookieAuthentication()
+            try:
+                user_auth = cookie_auth.authenticate(request)
+                if user_auth:
+                    return user_auth
+            except Exception:
+                pass
+            # Fallback to header-based auth
             auth = JWTAuthentication()
             try:
                 user_auth = auth.authenticate(request)
@@ -519,6 +529,16 @@ async def all_processing_status_stream(request):
     try:
         @sync_to_async
         def authenticate_user():
+            # Try cookie-based auth first (HttpOnly cookies)
+            from dj_rest_auth.jwt_auth import JWTCookieAuthentication
+            cookie_auth = JWTCookieAuthentication()
+            try:
+                user_auth = cookie_auth.authenticate(request)
+                if user_auth:
+                    return user_auth
+            except Exception:
+                pass
+            # Fallback to header-based auth
             auth = JWTAuthentication()
             try:
                 user_auth = auth.authenticate(request)

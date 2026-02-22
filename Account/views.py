@@ -135,9 +135,7 @@ def google_auth(request):
                 send_new_device_alert_email(user, request)
             record_user_fingerprint(user, request)
         
-        return Response({
-            'access': str(access_token_obj),
-            'refresh': str(refresh),
+        response_data = {
             'access_expiration': access_token_obj['exp'],
             'refresh_expiration': refresh['exp'],
             'user': {
@@ -149,7 +147,28 @@ def google_auth(request):
                 'premium_user': user.premium_user,
             },
             'is_new_user': created
-        }, status=status.HTTP_200_OK)
+        }
+        response = Response(response_data, status=status.HTTP_200_OK)
+
+        # Set HttpOnly cookies
+        from Config.settings import SIMPLE_JWT
+        cookie_kwargs = {
+            'httponly': True,
+            'secure': True,
+            'samesite': 'None',
+            'path': '/',
+        }
+        response.set_cookie(
+            'my-app-auth', str(access_token_obj),
+            max_age=int(SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
+            **cookie_kwargs,
+        )
+        response.set_cookie(
+            'my-refresh-token', str(refresh),
+            max_age=int(SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+            **cookie_kwargs,
+        )
+        return response
 
     except Exception as e:
         return Response(

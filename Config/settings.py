@@ -208,8 +208,11 @@ REST_AUTH = {
     'USE_JWT': True,
     'JWT_AUTH_RETURN_EXPIRATION': True,
     'JWT_AUTH_COOKIE': 'my-app-auth',
-    'JWT_AUTH_HTTPONLY': False,
+    'JWT_AUTH_HTTPONLY': True,
     'JWT_AUTH_REFRESH_COOKIE': 'my-refresh-token',
+    'JWT_AUTH_COOKIE_USE_CSRF': False,
+    'JWT_AUTH_SAMESITE': 'None',
+    'JWT_AUTH_SECURE': True,
     'USER_DETAILS_SERIALIZER': 'Account.serializers.UserDetailsSerializer',
     'REGISTER_SERIALIZER': 'Account.serializers.RegisterSerializer',
 }
@@ -265,6 +268,13 @@ CORS_ALLOW_HEADERS = [
     'cache-control',
     'connection',
     'x-device-fingerprint',
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://www.socraseek.com',
+    'https://socraseek.com',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ]
 
 # Security
