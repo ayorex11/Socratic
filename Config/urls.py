@@ -7,7 +7,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from resetpassword.views import PasswordResetRequestView, PasswordResetConfirmAPIView
-from Account.api_views import CustomLoginView
+from Account.api_views import CustomLoginView, CustomResendEmailVerificationView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -28,6 +28,7 @@ urlpatterns = [
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     path('auth/login/', CustomLoginView.as_view(), name='rest_login'),
     path('auth/', include('dj_rest_auth.urls')), 
+    path('registration/resend-email/', CustomResendEmailVerificationView.as_view(), name='custom_resend_email'),
     path('registration/', include('dj_rest_auth.registration.urls')),  
     path(
     'auth/password/reset/confirm/<str:uidb64>/<str:token>/', 

@@ -1,6 +1,6 @@
 from allauth.account.adapter import DefaultAccountAdapter
 from django.contrib.sites.shortcuts import get_current_site
-from django.urls import reverse
+from django.conf import settings
 
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
@@ -8,11 +8,8 @@ from django.template.loader import render_to_string
 class CustomAccountAdapter(DefaultAccountAdapter):
     def send_confirmation_mail(self, request, emailconfirmation, signup):
         current_site = get_current_site(request)
-        activate_url = reverse(
-            "account_confirm_email",
-            args=[emailconfirmation.key],
-        )
-        activate_url = "https://www.socraseek.com" + activate_url
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://www.socraseek.com')
+        activate_url = f"{frontend_url}/registration/account-confirm-email/{emailconfirmation.key}"
         ctx = {
             "user": emailconfirmation.email_address.user,
             "activate_url": activate_url,
