@@ -162,8 +162,12 @@ def process_document_task(self, result_id, user_id, study_storage_path, past_que
         try:
             result.update_stage('generating_summary', progress=55, message='Analyzing content with AI...')
             
-            if user.premium_user:
+            if result.is_premium_generation:
                 summary, qa_data = PremiumAIProcessor.generate_enhanced_content(study_text, past_questions_text)
+                
+                result.update_stage('generating_summary', progress=60, message='Generating flashcards...')
+                flashcards = PremiumAIProcessor.generate_flashcards(study_text)
+                result.flashcards = flashcards
             else:
                 summary, qa_data = AIProcessor.generate_enhanced_content(study_text, past_questions_text)
             
@@ -251,7 +255,7 @@ def process_document_task(self, result_id, user_id, study_storage_path, past_que
         try:
             result.update_stage('creating_quiz', progress=90, message='Generating practice quiz...')
             
-            if user.premium_user:
+            if result.is_premium_generation:
                 AdvancedQuizGenerator.generate_enhanced_quiz(result)
             else:
                 AIPoweredQuizGenerator.generate_quiz_from_processing_result(result)

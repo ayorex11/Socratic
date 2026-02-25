@@ -104,6 +104,69 @@ def initialize_deposit(request):
         )
         return Response({'error': 'Payment initialization failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@swagger_auto_schema(methods=['POST'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([PaymentInitThrottle])
+def initialize_payu(request):
+    user = request.user
+    amount = Decimal('500.00')
+    email = user.email
+
+    # Check for recent pending transactions
+    recent_pending = Transaction.objects.filter(
+        user=user,
+        amount_paid=amount,
+        type_of_transaction='PAYU_DOCUMENT',
+        completed=False,
+        date_created__gte=timezone.now() - timezone.timedelta(minutes=10)
+    ).first()
+    
+    if recent_pending:
+        return Response({
+            'message': 'Transaction already initiated',
+            'reference': recent_pending.reference
+        }, status=status.HTTP_200_OK)
+    
+    unique_ref = f"SocraSeek_PAYU_{user.id}_{int(timezone.now().timestamp())}_{uuid.uuid4().hex[:8]}"
+    
+    url = "https://api.paystack.co/transaction/initialize"
+    headers = {"authorization": f"Bearer {os.getenv('PRIVATE_KEY')}"}
+    request_body = {
+        'amount': int(amount * 100),
+        'email': email,
+        'reference': unique_ref,
+    }
+    
+    try:
+        r = requests.post(url, headers=headers, json=request_body)
+        r.raise_for_status()
+        response = r.json()
+        
+        Transaction.objects.create(
+            user=user,
+            type_of_transaction='PAYU_DOCUMENT',
+            date_created=timezone.now(),
+            amount_paid=amount,
+            reference=response['data']['reference'],
+            completed=False
+        )
+        
+        return Response({
+            'message': 'PAYU transaction initiated.',
+            'data': response
+        }, status=status.HTTP_200_OK)
+        
+    except requests.exceptions.RequestException as e:
+        LogEntry.objects.create(
+            timestamp=timezone.now(),
+            level='Error',
+            status_code='500',
+            message=f'Paystack API error (PAYU): {str(e)}',
+            user=user
+        )
+        return Response({'error': 'Payment initialization failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @csrf_exempt
 @require_POST
 @api_view(['POST'])
@@ -207,6 +270,7 @@ def handle_successful_payment(data):
     # Valid plan amounts (using Decimal for precision)
     STUDENT_PLAN_AMOUNT = Decimal('3000.00')
     PREMIUM_PLAN_AMOUNT = Decimal('7500.00')
+    PREMIUM_GENERATION_AMOUNT = Decimal('500.00')
     
     reference = data.get('reference')
     
@@ -251,7 +315,7 @@ def handle_successful_payment(data):
             amount = db_amount  # Use verified amount
         
             # CRITICAL: Validate that the amount is exactly one of the valid plan amounts
-            if amount not in [STUDENT_PLAN_AMOUNT, PREMIUM_PLAN_AMOUNT]:
+            if amount not in [STUDENT_PLAN_AMOUNT, PREMIUM_PLAN_AMOUNT, PREMIUM_GENERATION_AMOUNT]:
                 # Invalid amount - mark transaction as completed but don't grant access
                 transaction.completed = True
                 transaction.date_completed = timezone.now()
@@ -263,13 +327,13 @@ def handle_successful_payment(data):
                     level='Error',
                     status_code='400',
                     message=f'SECURITY: Invalid payment amount {amount} from {user.email}. '
-                            f'Only {STUDENT_PLAN_AMOUNT} (student) or {PREMIUM_PLAN_AMOUNT} (premium) allowed. '
+                            f'Only {STUDENT_PLAN_AMOUNT} (student), {PREMIUM_PLAN_AMOUNT} (premium), or {PREMIUM_GENERATION_AMOUNT} (payu) allowed. '
                             f'Access denied. Reference: {reference}'
                 )
                 
                 return Response({
                     'status': 'invalid_amount',
-                    'message': f'Invalid payment amount. Only {STUDENT_PLAN_AMOUNT} or {PREMIUM_PLAN_AMOUNT} are valid.'
+                    'message': f'Invalid payment amount. Only {STUDENT_PLAN_AMOUNT}, {PREMIUM_PLAN_AMOUNT}, or {PREMIUM_GENERATION_AMOUNT} are valid.'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Handle Student Plan (3000)
@@ -338,6 +402,27 @@ def handle_successful_payment(data):
                 )
                 
                 return Response({'status': 'success', 'plan': 'premium'}, status=status.HTTP_200_OK)
+                
+            # Handle Premium Generation (500)
+            elif amount == PREMIUM_GENERATION_AMOUNT:
+                # Grant 1 premium credit
+                user.premium_credits += 1
+                user.save(update_fields=['premium_credits'])
+                
+                # Mark transaction as completed
+                transaction.completed = True
+                transaction.date_completed = timezone.now()
+                transaction.save()
+                
+                LogEntry.objects.create(
+                    user=user,
+                    timestamp=timezone.now(),
+                    level='Normal',
+                    status_code='200',
+                    message=f'Premium generation purchased for {user.email}. Amount: {amount}. Reference: {reference}'
+                )
+                
+                return Response({'status': 'success', 'plan': 'premium_generation'}, status=status.HTTP_200_OK)
         
     except Transaction.DoesNotExist:
         # Log this for investigation

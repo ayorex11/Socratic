@@ -71,6 +71,23 @@ def create_processing(request):
         past_questions = data.get('past_questions')
         document_title = data['document_title']
         
+        # --- 3. Premium Generation Flag ---
+        use_premium = str(request.data.get('use_premium', 'false')).lower() == 'true'
+        is_premium_generation = False
+        
+        if use_premium:
+            if user.is_premium_active:
+                is_premium_generation = True
+            elif user.premium_credits > 0:
+                user.premium_credits -= 1
+                user.save(update_fields=['premium_credits'])
+                is_premium_generation = True
+            else:
+                return Response(
+                    {'error': 'Insufficient premium credits. Please purchase a credit or upgrade to premium.'},
+                    status=status.HTTP_402_PAYMENT_REQUIRED
+                )
+        
         # --- 3. Save files to R2 storage (accessible to all containers) ---
         study_file_path = _save_uploaded_file_to_storage(study_material)
         past_questions_file_path = _save_uploaded_file_to_storage(past_questions) if past_questions else None
@@ -81,6 +98,7 @@ def create_processing(request):
             document_title=document_title,
             original_filename=study_material.name,
             used_past_questions=bool(past_questions),
+            is_premium_generation=is_premium_generation,
             status='PENDING', 
         )
         
@@ -190,6 +208,13 @@ def download_pdf(request, pk):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
+        # Restrict physical downloads for free generations if the user is not Premium
+        if not user.is_premium_active and not result.is_premium_generation:
+            return Response(
+                {'error': 'Physical downloads are restricted for standard generations. Please use the in-browser viewer, upgrade to Premium, or use a Premium Credit.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         if not result.pdf_report:
             return Response(
                 {'error': 'PDF report not available',
@@ -267,6 +292,13 @@ def download_audio(request, pk):
                     {'error': 'Premium subscription required to access this document'},
                     status=status.HTTP_403_FORBIDDEN
                 )
+        
+        # Restrict physical downloads for free generations if the user is not Premium
+        if not user.is_premium_active and not result.is_premium_generation:
+            return Response(
+                {'error': 'Physical downloads are restricted for standard generations. Please use the in-browser viewer, upgrade to Premium, or use a Premium Credit.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         if not result.audio_summary:
             return Response(

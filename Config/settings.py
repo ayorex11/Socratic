@@ -186,7 +186,7 @@ ANYMAIL = {
     "SENDINBLUE_API_KEY": os.getenv('BREVO_API_KEY'),
 }
 
-DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'
+DEFAULT_FROM_EMAIL = 'noreply@socraseek.com'
 
 # Allauth
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[SocraSeek] '
@@ -250,7 +250,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     'https://www.socraseek.com',
-    'https://www.socraseek.com/',
     'https://socraseek.com',
 ]
 CORS_ALLOW_CREDENTIALS = True

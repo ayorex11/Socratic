@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+from django.conf import settings
 
 from .tokens import custom_token_generator 
 
@@ -50,7 +51,7 @@ class CustomPasswordResetRequestSerializer(serializers.Serializer):
         send_mail(
             subject,
             message,
-            'noreply@SocraSeek.com',  # From email
+            settings.DEFAULT_FROM_EMAIL,  # From email
             [user.email],  # To email
             fail_silently=False,
         )

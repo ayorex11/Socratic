@@ -94,6 +94,8 @@ class ProcessingResultSerializer(serializers.ModelSerializer):
     Includes all document data plus stage tracking.
     """
     processing_time_formatted = serializers.SerializerMethodField()
+    audio_view_url = serializers.SerializerMethodField()
+    pdf_view_url = serializers.SerializerMethodField()
     audio_download_url = serializers.SerializerMethodField()
     pdf_download_url = serializers.SerializerMethodField()
     has_past_questions_context = serializers.SerializerMethodField()
@@ -110,6 +112,9 @@ class ProcessingResultSerializer(serializers.ModelSerializer):
             'has_past_questions_context',
             'summary',
             'questions_answers',
+            'flashcards',
+            'audio_view_url',
+            'pdf_view_url',
             'audio_download_url',
             'pdf_download_url',
             'processing_time_formatted',
@@ -121,6 +126,7 @@ class ProcessingResultSerializer(serializers.ModelSerializer):
             'stage_label',
             'is_processing',
             'completion_percentage',
+            'is_premium_generation',
         ]
         read_only_fields = fields
     
@@ -129,12 +135,26 @@ class ProcessingResultSerializer(serializers.ModelSerializer):
             return f"{obj.processing_time:.2f} seconds"
         return "Not recorded"
     
+    def get_audio_view_url(self, obj):
+        if obj.audio_summary:
+            return obj.audio_summary.url
+        return None
+    
+    def get_pdf_view_url(self, obj):
+        if obj.pdf_report:
+            return obj.pdf_report.url
+        return None
+
     def get_audio_download_url(self, obj):
+        if not obj.is_premium_generation:
+            return None
         if obj.audio_summary:
             return obj.audio_summary.url
         return None
     
     def get_pdf_download_url(self, obj):
+        if not obj.is_premium_generation:
+            return None
         if obj.pdf_report:
             return obj.pdf_report.url
         return None

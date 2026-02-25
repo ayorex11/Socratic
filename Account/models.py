@@ -51,6 +51,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='free')
     subscription_end_date = models.DateField(blank=True, null=True)
     number_of_generations = models.IntegerField(default=0)
+    premium_credits = models.IntegerField(default=0)
     date_joined = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False, null=True)

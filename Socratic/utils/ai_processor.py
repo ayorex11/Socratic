@@ -284,3 +284,74 @@ class PremiumAIProcessor:
                 concepts.append((concept, sentence))
         
         return concepts[:5]
+
+    @classmethod
+    def generate_flashcards(cls, study_text):
+        """
+        Generate 15-20 flashcard terms and definitions using Gemini
+        """
+        if not cls._models_loaded:
+            cls.load_models()
+            
+        try:
+            processed_text = cls._preprocess_study_text(study_text)
+            
+            prompt = f"""
+            Based on the following study material, generate 15-20 flashcards for key terms.
+            Extract the most important vocabulary words, concepts, or formulas, and provide a clear, concise definition for each.
+            
+            STUDY MATERIAL:
+            {processed_text[:200000]}
+            
+            Please provide the output in this exact format:
+            
+            TERM: [Term Name]
+            DEFINITION: [Definition]
+            
+            TERM: [Term Name]
+            DEFINITION: [Definition]
+            
+            Make the definitions concise enough to fit on a flashcard.
+            """
+            
+            response = cls._model.generate_content(prompt)
+            
+            if response.text:
+                return cls._parse_flashcards_response(response.text)
+            return []
+        except Exception as e:
+            print(f"Flashcard generation failed: {str(e)}")
+            return []
+
+    @classmethod
+    def _parse_flashcards_response(cls, response_text):
+        """Parse Gemini response into structured flashcard pairs"""
+        flashcards = []
+        lines = response_text.split('\n')
+        
+        current_term = None
+        current_definition = []
+        
+        for line in lines:
+            line = line.strip()
+            if line.upper().startswith('TERM:'):
+                if current_term and current_definition:
+                    flashcards.append({
+                        'term': current_term,
+                        'definition': ' '.join(current_definition).strip()
+                    })
+                current_term = line.split(':', 1)[1].strip()
+                current_definition = []
+            elif line.upper().startswith('DEFINITION:'):
+                def_part = line.split(':', 1)[1].strip()
+                current_definition.append(def_part)
+            elif current_term and line:
+                current_definition.append(line)
+                
+        if current_term and current_definition:
+            flashcards.append({
+                'term': current_term,
+                'definition': ' '.join(current_definition).strip()
+            })
+            
+        return flashcards
