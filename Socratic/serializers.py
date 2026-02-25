@@ -58,6 +58,10 @@ class MinimalProcessingResultSerializer(serializers.ModelSerializer):
     """
     stage_label = serializers.SerializerMethodField()
     is_processing = serializers.SerializerMethodField()
+    audio_view_url = serializers.SerializerMethodField()
+    pdf_view_url = serializers.SerializerMethodField()
+    audio_download_url = serializers.SerializerMethodField()
+    pdf_download_url = serializers.SerializerMethodField()
     
     class Meta:
         model = ProcessingResult
@@ -76,6 +80,12 @@ class MinimalProcessingResultSerializer(serializers.ModelSerializer):
             'stage_message',           # e.g., 'Generating PDF report...'
             'stage_label',             # e.g., 'Creating PDF' (computed)
             'is_processing',           # e.g., True/False (computed)
+            'audio_view_url',
+            'pdf_view_url',
+            'audio_download_url',
+            'pdf_download_url',
+            'is_premium_generation',
+            'flashcards',
         ]
         read_only_fields = fields
     
@@ -86,7 +96,30 @@ class MinimalProcessingResultSerializer(serializers.ModelSerializer):
     def get_is_processing(self, obj):
         """Check if document is currently being processed"""
         return obj.status == 'PROCESSING' and obj.processing_stage not in ['completed', 'failed']
+        
+    def get_audio_view_url(self, obj):
+        if obj.audio_summary:
+            return obj.audio_summary.url
+        return None
+    
+    def get_pdf_view_url(self, obj):
+        if obj.pdf_report:
+            return obj.pdf_report.url
+        return None
 
+    def get_audio_download_url(self, obj):
+        if not obj.is_premium_generation:
+            return None
+        if obj.audio_summary:
+            return obj.audio_summary.url
+        return None
+    
+    def get_pdf_download_url(self, obj):
+        if not obj.is_premium_generation:
+            return None
+        if obj.pdf_report:
+            return obj.pdf_report.url
+        return None
 
 class ProcessingResultSerializer(serializers.ModelSerializer):
     """
