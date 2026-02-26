@@ -94,8 +94,8 @@ class RegisterSerializer(serializers.Serializer):
 class UserDetailsSerializer(UserDetailsSerializer):
     
     class Meta:
-        fields = ['email', 'username', 'first_name', 'last_name', 'premium_user', 'user_type', 'subscription_end_date', 'number_of_generations']
-        read_only_fields = ['email', 'premium_user', 'user_type', 'subscription_end_date', 'username', 'number_of_generations']
+        fields = ['email', 'username', 'first_name', 'last_name', 'premium_user', 'user_type', 'subscription_end_date', 'number_of_generations', 'premium_credits']
+        read_only_fields = ['email', 'premium_user', 'user_type', 'subscription_end_date', 'username', 'number_of_generations', 'premium_credits']
         model = User
 
         
