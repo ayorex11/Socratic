@@ -45,17 +45,18 @@ def create_processing(request):
     past_questions_file_path = None
 
     # --- 1. Generation Limit Check ---
+    # Allow users with premium credits to bypass the free generation limit
+    use_premium = str(request.data.get('use_premium', 'false')).lower() == 'true'
     if not user.is_premium_active and user.number_of_generations >= 3:
-        if user.premium_credits >= 1:
-            pass
-        LogEntry.objects.create(
-            user=user, timestamp=timezone.now(), level='Normal', status_code='403',
-            message='generation limit hit at create_processing'
-        )
-        return Response(
-            {'error': 'Free users can only process 3 documents. Please upgrade to premium for unlimited access.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        if not (use_premium and user.premium_credits > 0):
+            LogEntry.objects.create(
+                user=user, timestamp=timezone.now(), level='Normal', status_code='403',
+                message='generation limit hit at create_processing'
+            )
+            return Response(
+                {'error': 'Free users can only process 3 documents. Please upgrade to premium for unlimited access.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
     # --- 2. Input Validation ---
     serializer = DocumentProcessingSerializer(data=request.data)
