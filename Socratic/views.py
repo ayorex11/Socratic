@@ -75,10 +75,12 @@ def create_processing(request):
         use_premium = str(request.data.get('use_premium', 'false')).lower() == 'true'
         is_premium_generation = False
         
-        if use_premium:
-            if user.is_premium_active:
-                is_premium_generation = True
-            elif user.premium_credits > 0:
+        if user.is_premium_active:
+            # Active subscribers always get premium generation automatically
+            is_premium_generation = True
+        elif use_premium:
+            # Pay-as-you-go: free users can spend a credit for premium generation
+            if user.premium_credits > 0:
                 user.premium_credits -= 1
                 user.save(update_fields=['premium_credits'])
                 is_premium_generation = True
