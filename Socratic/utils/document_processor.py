@@ -33,6 +33,9 @@ class DocumentProcessor:
             processed_text = DocumentProcessor._reconstruct_paragraphs(full_text)
             meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
 
+            # Fallback: if filtering removed too much, return processed text
+            if len(meaningful_content.strip()) < 100 and len(processed_text.strip()) > 100:
+                return processed_text.strip()
             
             return meaningful_content.strip()
                 
@@ -207,47 +210,27 @@ class DocumentProcessor:
         if len(section_text) < 40:
             return False
         
-        # Check for sentence structure
-        sentences = re.split(r'[.!?]+', section_text)
-        if len(sentences) < 1:
-            return False
-        
-        # Check word count and diversity
+        # Check word count
         words = section_text.split()
-        if len(words) < 10:
+        if len(words) < 8:
             return False
         
-        # Check for content indicators (broad technical/academic terms)
-        content_indicators = [
-            # Technical terms
-            'network', 'control', 'data', 'plane', 'application', 'software',
-            'security', 'management', 'traditional', 'protocol', 'switch',
-            'router', 'virtual', 'hardware', 'system', 'architecture',
-            # Academic/document terms
-            'introduction', 'background', 'method', 'result', 'analysis',
-            'conclusion', 'discussion', 'example', 'definition', 'theory',
-            'model', 'framework', 'implementation', 'evaluation'
-        ]
+        # Check alpha character ratio — skip gibberish but keep real text
+        alpha_chars = sum(1 for c in section_text if c.isalpha())
+        if len(section_text) > 0 and alpha_chars / len(section_text) < 0.3:
+            return False
         
-        lower_text = section_text.lower()
-        content_matches = sum(1 for indicator in content_indicators if indicator in lower_text)
-        
-        # For academic/technical documents, require at least 1 content indicator
-        return content_matches >= 1
+        return True
     
     @staticmethod
     def _is_meaningful_line(line):
         """Check if a single line contains meaningful content"""
-        if len(line) < 15:
-            return False
-        
-        # Skip lines that are entirely uppercase (unless they're reasonable headers)
-        if line.isupper() and len(line) < 80:
+        if len(line) < 5:
             return False
         
         # Check alpha character ratio
         alpha_chars = sum(1 for c in line if c.isalpha())
-        if alpha_chars / len(line) < 0.3:
+        if len(line) > 0 and alpha_chars / len(line) < 0.3:
             return False
         
         # Skip lines that look like references or captions
@@ -309,14 +292,30 @@ class DocumentProcessor:
             doc = Document(file_path)
             full_text = ""
             
+            # Collect ALL paragraph text first (don't filter yet — matches PDF path)
             for paragraph in doc.paragraphs:
                 para_text = paragraph.text.strip()
-                if para_text and DocumentProcessor._is_meaningful_line(para_text):
+                if para_text:
                     full_text += para_text + "\n"
             
-            # Process with same section extraction as PDF
+            # Also extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            row_text.append(cell_text)
+                    if row_text:
+                        full_text += " | ".join(row_text) + "\n"
+            
+            # Process with same pipeline as PDF
             processed_text = DocumentProcessor._reconstruct_paragraphs(full_text)
             meaningful_content = DocumentProcessor._extract_meaningful_sections(processed_text)
+            
+            # Fallback: if filtering removed too much, return processed text
+            if len(meaningful_content.strip()) < 100 and len(processed_text.strip()) > 100:
+                return processed_text.strip()
             
             return meaningful_content.strip()
             
@@ -454,14 +453,31 @@ class DocumentProcessor:
         print("=== DOCUMENT EXTRACTION DEBUG ===")
         
         # Raw extraction
-        if file_type.upper() == 'PDF':
+        file_type_upper = file_type.upper()
+        if file_type_upper == 'PDF':
             doc = fitz.open(file_path)
             raw_text = ""
             for page in doc:
                 raw_text += page.get_text("text") + "\n"
             doc.close()
+        elif file_type_upper in ['DOCX', 'DOC']:
+            doc = Document(file_path)
+            raw_text = ""
+            for paragraph in doc.paragraphs:
+                para_text = paragraph.text.strip()
+                if para_text:
+                    raw_text += para_text + "\n"
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            row_text.append(cell_text)
+                    if row_text:
+                        raw_text += " | ".join(row_text) + "\n"
         else:
-            raw_text = "Debug available for PDF only"
+            raw_text = f"Debug not available for {file_type}"
         
         print(f"1. RAW TEXT LENGTH: {len(raw_text)}")
         print("RAW TEXT SAMPLE (first 500 chars):")
