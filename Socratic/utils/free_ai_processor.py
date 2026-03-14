@@ -4,120 +4,224 @@ from .gemini_config import GeminiConfig
 # ── Prompt templates ────────────────────────────────────────────────────────
 
 _SUMMARY_WITH_CONTEXT = """
-You are a university lecturer creating a comprehensive study summary for students.
+You are a friendly university tutor explaining study material to a student in plain, simple English.
 
-Your task is to summarize the ENTIRE document below. Do NOT skip any section.
-Work through the material from start to finish.
+Your task is to write a COMPLETE study guide covering EVERY section of the notes below.
+The student should be able to read your guide and actually understand the material — not just memorise copied definitions.
 
-RULES:
-- Cover EVERY topic, heading, and concept — nothing is optional
-- Use the exact terminology from the document (students are tested on specific terms)
-- Include all definitions, lists, classifications, and named techniques
-- Preserve numbered lists exactly as they appear (e.g. "3 benefits of X", "4 types of Y")
-- Flag every named concept, term, framework, method, or tool introduced in the document
-- Format with headings that match the document's own section headings
+WRITING RULES (follow every single one):
+- Write as if explaining to a smart friend who has never studied this topic before.
+- After every technical term, add a plain-English explanation in parentheses.
+  Example: "Elasticity (think of it like a rubber band — you can stretch your computing resources up during busy periods and shrink them back down when things are quiet)"
+- NEVER copy a sentence word-for-word from the notes. Always rephrase in your own words.
+- For every numbered list in the notes, keep the numbers AND explain what each item means in simple terms.
+- Use real-world analogies and everyday examples wherever possible.
+- Cover EVERY heading and sub-heading from the notes without skipping any.
+- The past exam questions are provided to help you understand which topics the examiner considers most important — give those topics extra depth and clarity.
 
-OUTPUT FORMAT:
-Use markdown with ## headings for major sections, ### for sub-sections.
-End with a "Key Terms to Know" section listing every named concept.
+OUTPUT FORMAT — use exactly this markdown structure for each section:
 
-STUDY MATERIAL:
+## [Section heading that matches the notes]
+
+[2-3 sentence plain-English overview of what this section is about and why it matters]
+
+### Key Concepts
+- **[Term]**: [Plain-English explanation in 1-3 sentences. Include an analogy if it helps.]
+- **[Term]**: [Plain-English explanation in 1-3 sentences. Include an analogy if it helps.]
+
+### Why This Matters
+[1-2 sentences on how this topic is used in the real world or why it appears in exams]
+
+---
+
+Repeat this block for EVERY section in the notes. Do not skip any section.
+
+After all sections, add:
+
+## Quick Reference: Key Terms
+| Term | What it actually means |
+|------|------------------------|
+| [term] | [one plain-English sentence] |
+
+---
+
+STUDY NOTES (cover every section):
 {study_text}
 
-PAST QUESTIONS (use these to understand what the examiner focuses on):
+PAST EXAM QUESTIONS (use these to identify which topics need the most depth):
 {context_text}
 
-Write the complete summary now:
+Write the complete study guide now, starting with the first section:
 """
 
 _SUMMARY_NO_CONTEXT = """
-You are a university lecturer creating a comprehensive study summary for students.
+You are a friendly university tutor explaining study material to a student in plain, simple English.
 
-Your task is to summarize the ENTIRE document below. Do NOT skip any section.
-Work through the material from start to finish.
+Your task is to write a COMPLETE study guide covering EVERY section of the notes below.
+The student should be able to read your guide and actually understand the material — not just memorise copied definitions.
 
-RULES:
-- Cover EVERY topic, heading, and concept — nothing is optional
-- Use the exact terminology from the document (students are tested on specific terms)
-- Include all definitions, lists, classifications, and named techniques
-- Preserve numbered lists exactly as they appear (e.g. "3 benefits of X", "4 types of Y")
-- Flag every named concept, term, framework, method, or tool introduced in the document
-- Format with headings that match the document's own section headings
+WRITING RULES (follow every single one):
+- Write as if explaining to a smart friend who has never studied this topic before.
+- After every technical term, add a plain-English explanation in parentheses.
+  Example: "Multitenancy (imagine an apartment building — multiple tenants share the same building infrastructure but each has their own private space)"
+- NEVER copy a sentence word-for-word from the notes. Always rephrase in your own words.
+- For every numbered list in the notes, keep the numbers AND explain what each item means in simple terms.
+- Use real-world analogies and everyday examples wherever possible.
+- Cover EVERY heading and sub-heading from the notes without skipping any.
 
-OUTPUT FORMAT:
-Use markdown with ## headings for major sections, ### for sub-sections.
-End with a "Key Terms to Know" section listing every named concept.
+OUTPUT FORMAT — use exactly this markdown structure for each section:
 
-STUDY MATERIAL:
+## [Section heading that matches the notes]
+
+[2-3 sentence plain-English overview of what this section is about and why it matters]
+
+### Key Concepts
+- **[Term]**: [Plain-English explanation in 1-3 sentences. Include an analogy if it helps.]
+- **[Term]**: [Plain-English explanation in 1-3 sentences. Include an analogy if it helps.]
+
+### Why This Matters
+[1-2 sentences on how this topic is used in the real world or why it appears in exams]
+
+---
+
+Repeat this block for EVERY section in the notes. Do not skip any section.
+
+After all sections, add:
+
+## Quick Reference: Key Terms
+| Term | What it actually means |
+|------|------------------------|
+| [term] | [one plain-English sentence] |
+
+---
+
+STUDY NOTES (cover every section):
 {study_text}
 
-Write the complete summary now:
+Write the complete study guide now, starting with the first section:
 """
 
 _QA_WITH_CONTEXT = """
-You are a university exam setter.
+You are a university exam setter creating practice questions for a student.
 
-Generate {num_questions} exam-style questions. Model your style EXACTLY after the past questions provided.
+CRITICAL FORMAT RULES — the output will be parsed by code so you MUST follow these exactly:
+- Every question line starts with EXACTLY: Q<number>: (e.g. Q1: Q2: Q15:)
+- Every answer line starts with EXACTLY: A<number>: (e.g. A1: A2: A15:)
+- The number on Q and A must always match.
+- Put ONE blank line between each Q/A pair.
+- Write NOTHING before Q1 — no titles, no preamble, no instructions, no introductions.
+- Do NOT use Q or A prefixes inside answer text itself.
 
-QUESTION STYLE RULES:
-- Use imperative verbs: "State", "List", "Define", "Explain", "Describe", "What is", "How does"
-- Be SPECIFIC and DIRECT — not vague (e.g. "State 3 benefits of X" not "Discuss X")
-- Include counts when the material gives them ("State 4 challenges...", "List 5 sources...")
-- Mix types: definitions (25%), lists (30%), explanations (30%), comparisons (15%)
-- Spread questions across the ENTIRE document — do not cluster on one topic
-- Answers must use exact terms from the material
+QUESTION QUALITY RULES:
+- Use action verbs: "Explain", "Define", "State", "List", "Describe", "Compare", "What is", "Why is", "How does"
+- Be specific: write "State 3 advantages of cloud computing" not "Discuss cloud computing"
+- When the notes mention a specific count (e.g. "5 types of X"), ask the student to name all of them.
+- Spread questions evenly across ALL sections — do not ask more than 2 questions on the same topic.
+- Model your question style closely after the past exam questions provided.
 
-PAST QUESTIONS (mirror this style):
+ANSWER QUALITY RULES:
+- Write answers in plain, clear English that a student can actually learn from.
+- After technical terms, briefly clarify what they mean.
+- Answers should be 2-5 sentences — detailed enough to be useful, short enough to study from.
+- Do NOT copy sentences word-for-word from the notes.
+- Do NOT start answers with "According to the notes" or similar phrases.
+
+PAST EXAM QUESTIONS (model your style and difficulty level on these):
 {context_text}
 
-STUDY MATERIAL:
+Generate exactly {num_questions} questions covering the full breadth of the notes.
+
+STUDY NOTES:
 {study_text}
 
-OUTPUT FORMAT:
-
-Q1: [Question]
-A1: [Answer]
-
-Q2: [Question]
-A2: [Answer]
-
-...continue for all {num_questions} questions.
+Start immediately with Q1 (absolutely nothing before it):
 """
 
 _QA_NO_CONTEXT = """
-You are a university exam setter.
+You are a university exam setter creating practice questions for a student.
 
-Generate {num_questions} exam-style questions from the study material.
+CRITICAL FORMAT RULES — the output will be parsed by code so you MUST follow these exactly:
+- Every question line starts with EXACTLY: Q<number>: (e.g. Q1: Q2: Q15:)
+- Every answer line starts with EXACTLY: A<number>: (e.g. A1: A2: A15:)
+- The number on Q and A must always match.
+- Put ONE blank line between each Q/A pair.
+- Write NOTHING before Q1 — no titles, no preamble, no instructions, no introductions.
+- Do NOT use Q or A prefixes inside answer text itself.
 
-QUESTION STYLE RULES:
-- Use imperative verbs: "State", "List", "Define", "Explain", "Describe", "What is", "How does"
-- Be SPECIFIC and DIRECT — not vague (e.g. "State 3 benefits of X" not "Discuss X")
-- Include counts when the material gives them ("State 4 challenges...", "List 5 sources...")
-- Mix types: definitions (25%), lists (30%), explanations (30%), comparisons (15%)
-- Spread questions across the ENTIRE document — do not cluster on one topic
-- Answers must use exact terms from the material
+QUESTION QUALITY RULES:
+- Use action verbs: "Explain", "Define", "State", "List", "Describe", "Compare", "What is", "Why is", "How does"
+- Be specific: write "State 3 advantages of cloud computing" not "Discuss cloud computing"
+- When the notes mention a specific count (e.g. "5 types of X"), ask the student to name all of them.
+- Spread questions evenly across ALL sections — do not ask more than 2 questions on the same topic.
 
-STUDY MATERIAL:
+ANSWER QUALITY RULES:
+- Write answers in plain, clear English that a student can actually learn from.
+- After technical terms, briefly clarify what they mean.
+- Answers should be 2-5 sentences — detailed enough to be useful, short enough to study from.
+- Do NOT copy sentences word-for-word from the notes.
+- Do NOT start answers with "According to the notes" or similar phrases.
+
+Generate exactly {num_questions} questions. Start with foundational definitions, move to
+processes and mechanisms, then finish with applications and comparisons.
+
+STUDY NOTES:
 {study_text}
 
-OUTPUT FORMAT:
+Start immediately with Q1 (absolutely nothing before it):
+"""
 
-Q1: [Question]
-A1: [Answer]
+_FLASHCARD = """
+You are creating study flashcards for a university student preparing for an exam.
 
-Q2: [Question]
-A2: [Answer]
+Each flashcard must be MEMORABLE and genuinely UNDERSTANDABLE — not a copied dictionary definition.
 
-...continue for all {num_questions} questions.
+RULES FOR EVERY CARD:
+- The TERM should be a single important concept, acronym, or technique from the notes.
+- The DEFINITION must:
+  * Be written in plain, conversational English (no copying from the notes)
+  * Be 1-3 sentences maximum
+  * Include a real-world analogy or everyday example where it helps understanding
+  * Explain WHY it matters or how it is used, not just what it is
+- BANNED phrases — never write these:
+  * "A concept related to..."
+  * "An important technique used in..."
+  * "This refers to..."
+  * "A term that describes..."
+  * Any other vague filler opener
+
+GOOD EXAMPLE:
+TERM: Elasticity
+DEFINITION: The ability to automatically scale your computing resources up or down based on demand — like a hotel that can add or remove rooms depending on how many guests are booked. This means you only pay for what you actually use and never run out of capacity during busy periods.
+
+BAD EXAMPLE:
+TERM: Elasticity
+DEFINITION: A cloud computing attribute that refers to the ability to increase or decrease resources as needed.
+
+STRICT FORMAT — use exactly this pattern, nothing else before or between cards:
+
+TERM: [term or acronym]
+DEFINITION: [plain-English explanation with example]
+
+TERM: [term or acronym]
+DEFINITION: [plain-English explanation with example]
+
+Generate exactly {num_cards} flashcards covering the most important and exam-likely terms.
+
+STUDY NOTES:
+{study_text}
+
+Start immediately with the first TERM (nothing before it):
 """
 
 
 # ── Processor ────────────────────────────────────────────────────────────────
 
+import re
+
 class AIProcessor:
     """
-    AI processor using Google Gemini with improved limits and prompt quality.
-    Generates comprehensive, exam-aligned summaries and questions.
+    Free-tier AI processor using Google Gemini.
+    15 questions, processes up to 30 good paragraphs.
     """
 
     _model = None
@@ -125,8 +229,9 @@ class AIProcessor:
 
     # ── Config ────────────────────────────────────────────────────────────
 
-    NUM_QUESTIONS = 15       # questions per document (free tier)
-    MAX_STUDY_CHARS = 50_000
+    NUM_QUESTIONS  = 15
+    NUM_FLASHCARDS = 20
+    MAX_STUDY_CHARS   = 50_000
     MAX_CONTEXT_CHARS = 10_000
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
@@ -158,9 +263,9 @@ class AIProcessor:
 
             if not processed_text or len(processed_text) < 100:
                 return (
-                    "Insufficient quality content for processing. "
-                    "Please ensure your document contains substantial text content.",
-                    []
+                    "The document doesn't contain enough readable text to process. "
+                    "Please make sure your file has actual content and try again.",
+                    {"total_questions": 0, "qa_pairs": [], "context_used": False},
                 )
 
             summary = cls._generate_coherent_summary(processed_text, past_questions_text)
@@ -181,17 +286,17 @@ class AIProcessor:
             return ""
 
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-        good = [p for p in paragraphs if len(p) >= 100 and len(p.split()) >= 15]
+        good = [p for p in paragraphs if len(p) >= 80 and len(p.split()) >= 12]
         selected = good[:30]
 
         if not selected:
-            return text[:50_000]
+            return text[:cls.MAX_STUDY_CHARS]
 
         return "\n\n".join(selected)
 
     @classmethod
     def _generate_coherent_summary(cls, study_text, context_text):
-        """Generate a section-by-section summary."""
+        """Generate a plain-English, section-by-section summary."""
         try:
             if context_text:
                 prompt = _SUMMARY_WITH_CONTEXT.format(
@@ -208,6 +313,7 @@ class AIProcessor:
             if response.text:
                 summary = response.text.strip()
                 if len(summary.split()) < 30:
+                    # Fallback: first few meaningful sentences
                     sentences = [s.strip() for s in study_text.split(".") if len(s.strip()) > 25]
                     summary = ". ".join(sentences[:4]) + "."
                 return summary
@@ -219,7 +325,7 @@ class AIProcessor:
 
     @classmethod
     def _generate_meaningful_questions(cls, study_text, context_text):
-        """Generate exam-style Q&A pairs."""
+        """Generate exam-style Q&A pairs with a robust parser."""
         try:
             num_q = cls.NUM_QUESTIONS
 
@@ -241,61 +347,70 @@ class AIProcessor:
                 qa_pairs = cls._parse_qa_response(response.text)
                 return {
                     "total_questions": len(qa_pairs),
-                    "context_used": bool(context_text),
-                    "qa_pairs": qa_pairs,
+                    "context_used":    bool(context_text),
+                    "qa_pairs":        qa_pairs,
                 }
 
             return {
                 "total_questions": 0,
-                "context_used": bool(context_text),
-                "qa_pairs": [],
-                "message": "Unable to generate questions at this time.",
+                "context_used":    bool(context_text),
+                "qa_pairs":        [],
+                "message":         "Unable to generate questions at this time.",
             }
 
         except Exception as e:
             return {
-                "error": f"Q&A generation failed: {str(e)}",
+                "error":           f"Q&A generation failed: {str(e)}",
                 "total_questions": 0,
-                "context_used": False,
-                "qa_pairs": [],
+                "context_used":    False,
+                "qa_pairs":        [],
             }
 
     @classmethod
     def _parse_qa_response(cls, response_text):
-        """Parse Gemini Q&A output into structured pairs."""
-        qa_pairs = []
-        lines = response_text.split("\n")
+        """
+        Robust regex-based parser.
+        Matches lines that start with Q<number>: or A<number>:
+        Ignores any prose that happens to start with Q or A (e.g. prompt echoes).
+        """
+        # Strip bold/italic markers some models add  (**Q1:** → Q1:)
+        text = re.sub(r"\*+", "", response_text)
 
-        current_question = None
-        current_answer = []
+        question_re = re.compile(
+            r"^Q(\d+)\s*[:\.\)]\s*(.+?)(?=^Q\d+\s*[:\.\)]|^A\d+\s*[:\.\)]|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        answer_re = re.compile(
+            r"^A(\d+)\s*[:\.\)]\s*(.+?)(?=^Q\d+\s*[:\.\)]|^A\d+\s*[:\.\)]|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
 
-        for line in lines:
-            line = line.strip()
-            if line.startswith(("Q", "Question")) and ":" in line:
-                if current_question and current_answer:
-                    qa_pairs.append(cls._make_qa(len(qa_pairs) + 1, current_question, current_answer))
-                current_question = line.split(":", 1)[1].strip()
-                current_answer = []
-            elif line.startswith(("A", "Answer")) and ":" in line:
-                current_answer.append(line.split(":", 1)[1].strip())
-            elif current_question and line and not line.startswith(("Q", "Question", "A", "Answer")):
-                current_answer.append(line)
+        questions = {int(m.group(1)): m.group(2).strip() for m in question_re.finditer(text)}
+        answers   = {int(m.group(1)): m.group(2).strip() for m in answer_re.finditer(text)}
 
-        if current_question and current_answer:
-            qa_pairs.append(cls._make_qa(len(qa_pairs) + 1, current_question, current_answer))
+        pairs = []
+        for idx in sorted(questions):
+            if idx in answers:
+                pairs.append({
+                    "id":         idx,
+                    "question":   questions[idx],
+                    "answer":     answers[idx],
+                    "type":       "concept_based",
+                    "difficulty": "medium",
+                })
 
-        if not qa_pairs:
-            qa_pairs = cls._generate_fallback_questions(response_text)
+        if not pairs:
+            pairs = cls._generate_fallback_questions(response_text)
 
-        return qa_pairs[:15]
+        return pairs[:cls.NUM_QUESTIONS]
 
     @classmethod
     def _make_qa(cls, idx, question, answer_lines):
         return {
-            "id": idx,
-            "question": question,
-            "answer": " ".join(answer_lines).strip(),
-            "type": "concept_based",
+            "id":         idx,
+            "question":   question,
+            "answer":     " ".join(answer_lines).strip(),
+            "type":       "concept_based",
             "difficulty": "medium",
         }
 
