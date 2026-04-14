@@ -1,30 +1,53 @@
 """
 Django settings for Config project.
+
+Environment modes:
+  ENV_MODE=local       → SQLite DB, local file storage, console email, no Redis required
+  ENV_MODE=production  → PostgreSQL, Cloudflare R2, Brevo email, Redis/Celery (default)
+
+Switch by changing ENV_MODE in your .env file. Since .env is gitignored,
+this never touches Git — your production code always stays clean.
 """
 
 from pathlib import Path
 import os
 from datetime import timedelta
 
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 load_dotenv()
-env_path = Path('.')/'.env'
+env_path = Path('.') / '.env'
 load_dotenv(dotenv_path=env_path)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ---------------------------------------------------------------------------
+# ENVIRONMENT MODE
+# Defaults to 'production' so Railway/deployment never accidentally runs local.
+# ---------------------------------------------------------------------------
+ENV_MODE = os.getenv('ENV_MODE', 'production').strip().lower()
+IS_LOCAL = ENV_MODE == 'local'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
 
+DEBUG = IS_LOCAL
 
-ALLOWED_HOSTS = ['localhost', '.ngrok-free.dev','.ngrok.io', 'https://socratic-f2kh.onrender.com', 'socratic-f2kh.onrender.com','socraseek.com', 'api.socraseek.com', 'socratic-production-e023.up.railway.app', 'https://socratic-production-e023.up.railway.app/', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.ngrok-free.dev',
+    '.ngrok.io',
+    'socraseek.com',
+    'api.socraseek.com',
+    'socratic-production-e023.up.railway.app',
+    'https://socratic-production-e023.up.railway.app/',
+    'https://socratic-f2kh.onrender.com',
+    'socratic-f2kh.onrender.com',
+]
 
 # Application definition
-# Testing git configuration
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -71,7 +94,7 @@ ROOT_URLCONF = 'Config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'Config','templates', 'template'],
+        'DIRS': [BASE_DIR / 'Config', 'templates', 'template'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -87,21 +110,99 @@ TEMPLATES = [
 WSGI_APPLICATION = 'Config.wsgi.application'
 
 
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('PGDATABASE'),  
-        'USER': os.getenv('PGUSER'),     
-        'PASSWORD': os.getenv('PGPASSWORD'),  
-        'HOST': os.getenv('PGHOST'),      
-        'PORT': os.getenv('PGPORT', '5432'),  
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
-        'CONN_MAX_AGE': 600,
+# ---------------------------------------------------------------------------
+# DATABASE
+# local  → existing SQLite file (no internet required)
+# production → PostgreSQL on Railway
+# ---------------------------------------------------------------------------
+if IS_LOCAL:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',  # Uses your existing db.sqlite3
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('PGDATABASE'),
+            'USER': os.getenv('PGUSER'),
+            'PASSWORD': os.getenv('PGPASSWORD'),
+            'HOST': os.getenv('PGHOST'),
+            'PORT': os.getenv('PGPORT', '5432'),
+            'OPTIONS': {
+                'sslmode': 'require',
+            },
+            'CONN_MAX_AGE': 600,
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# STORAGE & STATIC / MEDIA FILES
+# local  → local filesystem (media/ and staticfiles/ folders)
+# production → Cloudflare R2 via S3Boto3
+# ---------------------------------------------------------------------------
+if IS_LOCAL:
+    # Local filesystem storage — no R2 credentials needed
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+    STATIC_URL = '/static/'
+    STATIC_ROOT = BASE_DIR / 'staticfiles'
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
+
+else:
+    # Cloudflare R2 Configuration
+    AWS_ACCESS_KEY_ID = os.getenv('ACCESS_KEY')
+    AWS_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.getenv('BUCKET_NAME')
+    AWS_S3_REGION_NAME = "auto"
+    AWS_S3_ENDPOINT_URL = f"https://{os.getenv('ACCOUNT_ID')}.r2.cloudflarestorage.com"
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+
+    # Make files publicly accessible
+    AWS_DEFAULT_ACL = 'public-read'
+    AWS_QUERYSTRING_AUTH = False
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_S3_OBJECT_PARAMETERS = {
+        'CacheControl': 'max-age=86400',
+    }
+
+    # Set custom domain if available
+    R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
+    if R2_PUBLIC_URL:
+        AWS_S3_CUSTOM_DOMAIN = R2_PUBLIC_URL
+    else:
+        AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.r2.cloudflarestorage.com"
+
+    # Storage configuration with folder arrangements
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "location": "media",  # All media files go to 'media/' folder in R2
+                "file_overwrite": False,
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "location": "static",  # All static files go to 'static/' folder in R2
+            },
+        },
+    }
+
+    STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -125,131 +226,73 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Cloudflare R2 Configuration - Everything goes to R2
-AWS_ACCESS_KEY_ID = os.getenv('ACCESS_KEY')
-AWS_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_KEY')
-AWS_STORAGE_BUCKET_NAME = os.getenv('BUCKET_NAME')
-AWS_S3_REGION_NAME = "auto"
-AWS_S3_ENDPOINT_URL = f"https://{os.getenv('ACCOUNT_ID')}.r2.cloudflarestorage.com"
-AWS_S3_SIGNATURE_VERSION = 's3v4'
-
-# Make files publicly accessible
-AWS_DEFAULT_ACL = 'public-read'
-AWS_QUERYSTRING_AUTH = False
-AWS_S3_FILE_OVERWRITE = False
-AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
-}
-
-# Set custom domain if available
-R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
-if R2_PUBLIC_URL:
-    AWS_S3_CUSTOM_DOMAIN = R2_PUBLIC_URL
-else:
-    AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.r2.cloudflarestorage.com"
-
-# Storage configuration with folder arrangements
-STORAGES = {
-    "default": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-        "OPTIONS": {
-            "location": "media",  # All media files go to 'media/' folder in R2
-            "file_overwrite": False,
-        },
-    },
-    "staticfiles": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage", 
-        "OPTIONS": {
-            "location": "static",  # All static files go to 'static/' folder in R2
-        },
-    },
-}
-
-# URLs for static and media files
-STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
-MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
-
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-#EMAIL_HOST = 'smtp-relay.brevo.com'
-#EMAIL_PORT = 587
-#EMAIL_USE_TLS = True
-#EMAIL_HOST_USER = '9b1d5f001@smtp-brevo.com' 
-#EMAIL_HOST_PASSWORD = os.getenv('BREVO_SMTP_KEY')
-#DEFAULT_FROM_EMAIL = 'socraticaiapp@gmail.com'  
-
-EMAIL_BACKEND = "anymail.backends.sendinblue.EmailBackend"
-
-ANYMAIL = {
-    "SENDINBLUE_API_KEY": os.getenv('BREVO_API_KEY'),
-}
+# ---------------------------------------------------------------------------
+# EMAIL
+# local  → console backend (emails print to terminal, no internet needed)
+# production → Brevo (Sendinblue) via anymail
+# ---------------------------------------------------------------------------
+if IS_LOCAL:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = "anymail.backends.sendinblue.EmailBackend"
+    ANYMAIL = {
+        "SENDINBLUE_API_KEY": os.getenv('BREVO_API_KEY'),
+    }
 
 DEFAULT_FROM_EMAIL = 'noreply@socraseek.com'
 
-# Allauth
-ACCOUNT_EMAIL_SUBJECT_PREFIX = '[SocraSeek] '
-SITE_ID = 1
-SITE_NAME = 'SocraSeek'
 
-# Custom user model
-AUTH_USER_MODEL = 'Account.User'
+# ---------------------------------------------------------------------------
+# CELERY
+# local  → tasks run eagerly (synchronously, in-process) — no Redis needed
+# production → Redis broker
+# ---------------------------------------------------------------------------
+if IS_LOCAL:
+    CELERY_TASK_ALWAYS_EAGER = True   # Run tasks synchronously, no broker needed
+    CELERY_TASK_EAGER_PROPAGATES = True
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_RESULT_BACKEND = 'cache+memory://'
+else:
+    CELERY_BROKER_URL = os.getenv('REDIS_URL')
+    CELERY_RESULT_BACKEND = os.getenv('REDIS_URL')
+    CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': 3600}
 
-# URLs
-FRONTEND_URL = 'https://www.socraseek.com'
-DJANGO_SITE_URL = 'http://localhost:8000'
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-ACCOUNT_SIGNUP_FIELDS = ['email*']
-BASE_URL = 'localhost:5173'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
 
-# REST Auth
-REST_AUTH = {
-    'USE_JWT': True,
-    'JWT_AUTH_RETURN_EXPIRATION': True,
-    'JWT_AUTH_COOKIE': 'my-app-auth',
-    'JWT_AUTH_HTTPONLY': True,
-    'JWT_AUTH_REFRESH_COOKIE': 'my-refresh-token',
-    'JWT_AUTH_COOKIE_USE_CSRF': False,
-    'JWT_AUTH_SAMESITE': 'None',
-    'JWT_AUTH_SECURE': True,
-    'USER_DETAILS_SERIALIZER': 'Account.serializers.UserDetailsSerializer',
-    'REGISTER_SERIALIZER': 'Account.serializers.RegisterSerializer',
-}
 
-REST_AUTH_TOKEN_MODEL = None
+# ---------------------------------------------------------------------------
+# SECURITY
+# local  → relaxed (no HTTPS enforcement)
+# production → full HTTPS/HSTS
+# ---------------------------------------------------------------------------
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = not IS_LOCAL
+SESSION_COOKIE_SECURE = not IS_LOCAL
+CSRF_COOKIE_SECURE = not IS_LOCAL
+SECURE_HSTS_SECONDS = 0 if IS_LOCAL else 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not IS_LOCAL
+SECURE_HSTS_PRELOAD = not IS_LOCAL
+SECURE_BROWSER_XSS_FILTER = not IS_LOCAL
+SECURE_CONTENT_TYPE_NOSNIFF = not IS_LOCAL
+X_FRAME_OPTIONS = 'DENY'
 
-# REST Framework
-REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
-    ],
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle', 
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/day',
-        'user': '30/hour',
-        'user_burst': '5/minute',  
-        'user_sustained': '15/hour',
-        'dj_rest_auth': '1000/day',  
-        'login': '10/minute',
-        'registration': '5/hour',
-    }
-}
 
+# ---------------------------------------------------------------------------
 # CORS
+# ---------------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:3001',
-    "http://localhost:8080",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    'http://localhost:8080',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
     'https://www.socraseek.com',
     'https://socraseek.com',
     'https://api.socraseek.com',
@@ -279,61 +322,21 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1:5173',
 ]
 
-# Security
-IS_DEVELOPMENT = DEBUG
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = not IS_DEVELOPMENT  
-SESSION_COOKIE_SECURE = not IS_DEVELOPMENT
-CSRF_COOKIE_SECURE = not IS_DEVELOPMENT
-SECURE_HSTS_SECONDS = 31536000 if not IS_DEVELOPMENT else 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS = not IS_DEVELOPMENT
-SECURE_HSTS_PRELOAD = not IS_DEVELOPMENT
-SECURE_BROWSER_XSS_FILTER = not IS_DEVELOPMENT
-SECURE_CONTENT_TYPE_NOSNIFF = not IS_DEVELOPMENT
-X_FRAME_OPTIONS = 'DENY'
 
-# JWT
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
-    "REFRESH_TOKEN_LIFETIME": timedelta(hours=24),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "UPDATE_LAST_LOGIN": True,
-}
+# ---------------------------------------------------------------------------
+# ALLAUTH / AUTH
+# ---------------------------------------------------------------------------
+ACCOUNT_EMAIL_SUBJECT_PREFIX = '[SocraSeek] '
+SITE_ID = 1
+SITE_NAME = 'SocraSeek'
 
-# Custom adapters
-ACCOUNT_ADAPTER = 'Config.adapters.CustomAccountAdapter'
+AUTH_USER_MODEL = 'Account.User'
 
-# Gemini
-GEMINI_CONFIG = {
-    'temperature': 0.7,
-    'top_p': 0.8,
-    'top_k': 40,
-    'max_output_tokens': 2048,
-}
-
-# Swagger
-SWAGGER_SETTINGS = {
-    'PERSIST_AUTH': True,  
-    'USE_SESSION_AUTH': False, 
-    'SECURITY_DEFINITIONS': {
-        'Bearer': {
-            'type': 'apiKey',
-            'name': 'Authorization',
-            'in': 'header',
-            'description': 'Enter your JWT token with `Bearer ` prefix, e.g. Bearer <token>',
-        }
-    },
-}
-
-# Celery
-CELERY_BROKER_URL = os.getenv('REDIS_URL')
-CELERY_RESULT_BACKEND = os.getenv('REDIS_URL')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
-CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': 3600}
+FRONTEND_URL = 'https://www.socraseek.com'
+DJANGO_SITE_URL = 'http://localhost:8000'
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_SIGNUP_FIELDS = ['email*']
+BASE_URL = 'localhost:5173'
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -357,6 +360,85 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'
+
+ACCOUNT_ADAPTER = 'Config.adapters.CustomAccountAdapter'
+
+
+# ---------------------------------------------------------------------------
+# REST FRAMEWORK / AUTH
+# ---------------------------------------------------------------------------
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_RETURN_EXPIRATION': True,
+    'JWT_AUTH_COOKIE': 'my-app-auth',
+    'JWT_AUTH_HTTPONLY': True,
+    'JWT_AUTH_REFRESH_COOKIE': 'my-refresh-token',
+    'JWT_AUTH_COOKIE_USE_CSRF': False,
+    'JWT_AUTH_SAMESITE': 'None',
+    'JWT_AUTH_SECURE': True,
+    'USER_DETAILS_SERIALIZER': 'Account.serializers.UserDetailsSerializer',
+    'REGISTER_SERIALIZER': 'Account.serializers.RegisterSerializer',
+}
+
+REST_AUTH_TOKEN_MODEL = None
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
+    ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '30/hour',
+        'user_burst': '5/minute',
+        'user_sustained': '15/hour',
+        'dj_rest_auth': '1000/day',
+        'login': '10/minute',
+        'registration': '5/hour',
+    }
+}
+
+# JWT
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
+    "REFRESH_TOKEN_LIFETIME": timedelta(hours=24),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+}
+
+
+# ---------------------------------------------------------------------------
+# GEMINI
+# ---------------------------------------------------------------------------
+GEMINI_CONFIG = {
+    'temperature': 0.7,
+    'top_p': 0.8,
+    'top_k': 40,
+    'max_output_tokens': 2048,
+}
+
+
+# ---------------------------------------------------------------------------
+# SWAGGER
+# ---------------------------------------------------------------------------
+SWAGGER_SETTINGS = {
+    'PERSIST_AUTH': True,
+    'USE_SESSION_AUTH': False,
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Enter your JWT token with `Bearer ` prefix, e.g. Bearer <token>',
+        }
+    },
+}
